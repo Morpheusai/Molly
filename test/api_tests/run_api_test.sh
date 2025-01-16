@@ -1,0 +1,1 @@
+pytest -v --durations=0 api_tests/test_app.py test_read_root
