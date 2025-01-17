@@ -67,8 +67,16 @@ app.post("/add_user",tags=["用户数据"],summary="添加用户")(add_user)
 
 app.post("/query_user_info",tags=["用户数据"],summary="查询用户信息")(query_user_info)
 
-app.post("/delete_specific_session",tags=["会话数据"],summary="删除特定会话")(delete_specific_session)
+app.post("/delete_specific_session",tags=["会话数据"],summary="删除特定会话")(delete_specific_session)#
 
-app.post("/delete_sessions",tags=["会话数据"],summary="查询用户信息")(delete_sessions)
+app.post("/delete_sessions",tags=["会话数据"],summary="删除全部会话")(delete_sessions)
+
+app.post("/search_specific_session",tags=["会话数据"],summary="查询单一会话")(search_specific_session)
+
+app.post("/search_sessions",tags=["会话数据"],summary="查询会话历史")(search_sessions)
+
+app.post("/insert_user_input",tags=["消息数据"],summary="插入单一会话内部-用户输入")(insert_user_input)
+
+app.post("/search_wx_info",tags=["微信消息数据"],summary="查询微信用户信息")(search_wx_info)
 
 # 补充

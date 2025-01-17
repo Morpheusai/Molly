@@ -1,21 +1,27 @@
 import os
 import sys
-sys.path.append(os.path.dirname(__file__))
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
-
+import platform
 import logging
 import logging.config as log_config
 from config import g_config
 
-cmd = "cat /proc/self/cgroup"
-output = os.popen(cmd)
-rests = output.readlines()
-container_message = rests[0]
+# 判断操作系统类型
+if platform.system() == "Linux":
+    cmd = "cat /proc/self/cgroup"
+    output = os.popen(cmd)
+    rests = output.readlines()
+    if rests:
+        container_message = rests[0]
+    else:
+        container_message = ""
+else:
+    container_message = ""  # 在非 Linux 系统上，直接赋空值
+
 appendstr = ""
 if container_message and "docker" in container_message:
-    appendstr= container_message.strip().split("docker")[-1][1:]
+    appendstr = container_message.strip().split("docker")[-1][1:]
 elif container_message and "kubepods" in container_message and "/" in container_message:
-    appendstr= container_message.strip().split("/")[-1][:12]
+    appendstr = container_message.strip().split("/")[-1][:12]
 
 logger_config = {
     "version": 1,
@@ -54,7 +60,6 @@ logger_config = {
 
 def config_logger(log_dir, log_level, name):
     # config logger
-
     if not log_level:
         log_level = "INFO"
 
@@ -73,6 +78,3 @@ if not os.path.exists(LOG_PATH):
 config_logger(g_config["log"]['log_path'], g_config["log"]['log_level'], f"server")
 
 logger = logging.getLogger()
-
-
-
