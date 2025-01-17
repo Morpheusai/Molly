@@ -77,6 +77,6 @@ app.post("/search_sessions",tags=["会话数据"],summary="查询会话历史")(
 
 app.post("/insert_user_input",tags=["消息数据"],summary="插入单一会话内部-用户输入")(insert_user_input)
 
-app.post("/search_wx_info",tags=["微信消息数据"],summary="查询微信用户信息")(search_wx_info)
+app.post("/add_sessions",tags=["会话数据"],summary="新建会话记录信息")(add_sessions)
 
 # 补充

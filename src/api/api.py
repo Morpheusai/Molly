@@ -15,26 +15,12 @@ from db.user_model import UserModel
 import uuid
 from datetime import datetime
 
-#添加用户
+#用户注册
 async def add_user(
         request: AddUserRequest = Body(...),
         session: AsyncSession = Depends(get_async_db)
 ):
-    """
-    用户注册逻辑
-    """
-    print(f"request: {request}")
-
-    user = UserModel(
-        id=str(uuid.uuid4()),
-        request_id=request.request_id,
-        user_id=request.user_id,
-        user_name=request.user_name,
-        email=request.email,
-        phone=request.phone,
-        create_time=datetime.now(),
-    )
-    return await add_user_sql(user,session,request)
+    return await add_user_sql(session,request)
 
 #查询用户信息
 async def query_user_info(
@@ -76,14 +62,8 @@ async def insert_user_input(
         request: InsertUserInputSessionRequest = Body(...),
         session: AsyncSession = Depends(get_async_db)
 ):
-    msg = MessageModel(
-        id=str(uuid.uuid4()),
-        conversation_id=request.id,
-        query=request.query,
-        response="",
-        create_time=datetime.now(),
-    )    
-    return await insert_user_input_sql(msg,session,request)
+
+    return await insert_user_input_sql(session,request)
 
 #后端接口，没有放在路由上
 #插入单一会话内部-AI回复
@@ -93,9 +73,9 @@ async def insert_ai_input(
 ):
     return await insert_ai_input_sql(session,request)
 
-#查询微信用户信息
-async def search_wx_info(
-        request: UserInfoRequest = Body(...),
-        session: AsyncSession = Depends(get_async_db)        
+#新建会话记录
+async def add_sessions(
+        session: AsyncSession = Depends(get_async_db),
+        request: AddSessionRequest = Body(...)        
 ):
-    return await search_wx_info_sql(session,request)
+    return await add_sessions_sql(session,request)

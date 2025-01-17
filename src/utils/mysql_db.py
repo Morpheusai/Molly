@@ -6,13 +6,14 @@ from sqlalchemy.exc import IntegrityError
 from api.protocols import *
 from db.conversation_model import ConversationModel
 from db.message_model import MessageModel
-from db.userinfo_model import UserInfo
+
 from passlib.hash import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 from pydantic import BaseModel
 from sqlalchemy import delete
 import uuid
+from datetime import datetime
 from fastapi import Response
 from fastapi.responses import JSONResponse
 from typing import List
@@ -22,21 +23,31 @@ from utils.session import get_async_db
 from sqlalchemy import desc
 from fastapi import HTTPException
 #添加用户记录sql
-async def add_user_sql(user :UserModel, session:AsyncSession= Depends(get_async_db),  request: AddUserRequest = Body(...)):
+async def add_user_sql(session:AsyncSession= Depends(get_async_db),  request: AddUserRequest = Body(...)):
     try:
+        user = UserModel(
+        unionid=request.unionid,
+        openid=request.openid,
+        nickname=request.nickname,
+        sex=request.sex,
+        province=request.province,
+        city=request.city,
+        country=request.country,
+        headimgurl=request.headimgurl,
+        privilege=request.privilege,
+        create_time=datetime.now(),
+    )
         session.add(user)
         await session.commit()
         await session.refresh(user)
 
         return BaseResponse(
-            request_id=request.request_id,
             ok=0,
             failed=""
         )
     except Exception as e:
         await session.rollback()
         return BaseResponse(
-            request_id=request.request_id,
             ok=1,
             failed=str(e)
         )
@@ -44,19 +55,22 @@ async def add_user_sql(user :UserModel, session:AsyncSession= Depends(get_async_
 #查询用户信息sql
 async def query_user_info_sql(session:AsyncSession= Depends(get_async_db),  request: AddUserRequest = Body(...)):
     try:
-        user = await session.execute(select(UserModel).where(UserModel.user_id == request.user_id))
+        user = await session.execute(select(UserModel).where(UserModel.unionid == request.unionid))
         user = user.scalar_one_or_none()
         return QueryUserInfoResponse(
-            request_id=user.request_id,
-            user_id=user.user_id,
-            user_name=user.user_name,
-            phone=user.phone,
-            email=user.email
+        unionid=request.unionid,
+        openid=request.openid,
+        nickname=request.nickname,
+        sex=request.sex,
+        province=request.province,
+        city=request.city,
+        country=request.country,
+        headimgurl=request.headimgurl,
+        privilege=request.privilege,
         )
     except Exception as e:
         await session.rollback()
         return BaseResponse(
-            request_id=request.request_id,
             ok=1,
             failed=str(e)
         )
@@ -84,14 +98,12 @@ async def delete_specific_session_sql(
         await session.commit()
         
         return BaseResponse(
-            request_id=request.request_id,
             ok=0,
             failed=""
         )
     except Exception as e:
         await session.rollback()
         return BaseResponse(
-            request_id=request.request_id,
             ok=1,
             failed=str(e)
         )
@@ -114,7 +126,6 @@ async def delete_sessions_sql(
             if not session_ids:
                 # 如果该用户没有会话，直接返回成功
                 return BaseResponse(
-                    request_id=request.request_id,
                     ok=0,
                     failed=""
                 )
@@ -134,14 +145,12 @@ async def delete_sessions_sql(
             )
 
             return BaseResponse(
-                request_id=request.request_id,
                 ok=0,
                 failed=""
             )
     except Exception as e:
         await session.rollback()
         return BaseResponse(
-            request_id=request.request_id,
             ok=1,
             failed=str(e)
         )
@@ -168,7 +177,6 @@ async def search_specific_session_sql(
 
         if not session_data:
             return QuerySessionResponse(
-                request_id=request.request_id,
                 user_id=request.user_id,
                 session_id=request.session_id,
                 ok=1,
@@ -182,7 +190,6 @@ async def search_specific_session_sql(
             chats.append(ChatItem(query=record.query, response=record.response))
 
         return QuerySessionResponse(
-            request_id=request.request_id,
             user_id=request.user_id,
             session_id=request.session_id,
             ok=0,
@@ -191,7 +198,6 @@ async def search_specific_session_sql(
         )
     except Exception as e:
         return QuerySessionResponse(
-            request_id=request.request_id,
             user_id=request.user_id,
             session_id=request.session_id,
             ok=1,
@@ -226,26 +232,34 @@ async def search_sessions_sql(
             ))
 
         return QuerySessionsResponse(
-            request_id=request.request_id,
             ok=0,
             failed="",
             sessions=sessions
         )
     except Exception as e:
         return QuerySessionsResponse(
-            request_id=request.request_id,
             ok=1,
             failed=str(e),
             sessions=[]
         )
 
 #插入单一会话内部-用户输入sql
-async def insert_user_input_sql(msg:MessageModel,
+async def insert_user_input_sql(
         session: AsyncSession = Depends(get_async_db),
         request: InsertUserInputSessionRequest = Body(...)
 ):
 
     try:
+        msg = MessageModel(
+        id=str(uuid.uuid4()),
+        conversation_id=request.id,
+        query=request.query,
+        response=request.response,
+        meta_data=request.meta_data,
+        feedback_score=request.feedback_score,
+        feedback_reason=request.feedback_reason,
+        create_time=datetime.now(),
+        )    
         # 添加到数据库会话
         session.add(msg)
         # 提交到数据库
@@ -253,17 +267,16 @@ async def insert_user_input_sql(msg:MessageModel,
         # 刷新以获取数据库分配的 ID 等字段
         await session.refresh(msg)
         return BaseResponse(
-            request_id=request.request_id,
             ok=0,
             failed=""
         )
     except Exception as e:
         await session.rollback()
         return BaseResponse(
-            request_id=request.request_id,
             ok=1,
             failed=str(e)
         )
+    
 #插入单一会话内部-AI回复sql
 async def insert_ai_input_sql(
         session: AsyncSession = Depends(get_async_db),
@@ -278,65 +291,48 @@ async def insert_ai_input_sql(
             session.add(m)    
             await session.commit()
         return BaseResponse(
-            request_id=request.request_id,
             ok=0,
             failed=""
         )
     except Exception as e:
         await session.rollback()
         return BaseResponse(
-            request_id=request.request_id,
             ok=1,
             failed=str(e)
         )
 
-#查询微信用户信息
-async def search_wx_info_sql(
-    session: AsyncSession = Depends(get_async_db),
-    request: UserInfoRequest = Body(...)
+
+
+
+#新建会话记录sql
+async def add_sessions_sql(
+        session: AsyncSession = Depends(get_async_db),
+        request: AddSessionRequest = Body(...)        
 ):
     try:
-        # 查询用户信息
-        query = select(UserInfo).where(
-            (UserInfo.openid == request.openid) | (UserInfo.unionid == request.unionid)
-        )
-        result = await session.execute(query)
-        user_info = result.scalars().first()
-
-        # 如果用户信息存在，返回 UserInfoResponse
-        if user_info:
-            return UserInfoResponse(
-                openid=user_info.openid,
-                nickname=user_info.nickname,
-                sex=user_info.sex,
-                province=user_info.province,
-                city=user_info.city,
-                country=user_info.country,
-                headimgurl=user_info.headimgurl,
-                privilege=user_info.privilege,
-                unionid=user_info.unionid
-            )
-        else:
-            # 如果用户信息不存在，返回错误信息
-            return BaseResponse(
-                request_id=request.request_id,
-                ok=1,
-                failed="User not found"
-            )
-    except Exception as e:
-        # 捕获异常并返回错误信息
+        msg = ConversationModel(
+        id=str(uuid.uuid4()),
+        user_id=request.user_id,
+        session_title=request.session_title,
+        chat_type=request.chat_type,
+        create_time=datetime.now(),
+        )    
+        # 添加到数据库会话
+        session.add(msg)
+        # 提交到数据库
+        await session.commit()
+        # 刷新以获取数据库分配的 ID 等字段
+        await session.refresh(msg)
         return BaseResponse(
-            request_id=request.request_id,
+            ok=0,
+            failed=""
+        )
+    except Exception as e:
+        await session.rollback()
+        return BaseResponse(
             ok=1,
             failed=str(e)
-        )
-
-
-
-
-
-
-
+            )
 
 
 

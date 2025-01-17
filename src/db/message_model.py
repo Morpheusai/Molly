@@ -18,6 +18,13 @@ class MessageModel(Base):
     
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
 
+    # 记录知识库id等，以便后续扩展
+    meta_data = Column(JSON, default={})
+
+    # 满分100 越高表示评价越好
+    feedback_score = Column(Integer, default=-1, comment="用户评分")
+    feedback_reason = Column(String(255), default="", comment="用户评分理由")
+
     conversations = relationship('ConversationModel', back_populates='messages')
 
     def __repr__(self):
