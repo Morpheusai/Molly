@@ -53,20 +53,20 @@ async def add_user_sql(session:AsyncSession= Depends(get_async_db),  request: Ad
         )
 
 #查询用户信息sql
-async def query_user_info_sql(session:AsyncSession= Depends(get_async_db),  request: AddUserRequest = Body(...)):
+async def query_user_info_sql(session:AsyncSession= Depends(get_async_db),  request: QueryUserInfoRequest = Body(...)):
     try:
         user = await session.execute(select(UserModel).where(UserModel.unionid == request.unionid))
         user = user.scalar_one_or_none()
         return QueryUserInfoResponse(
-        unionid=request.unionid,
-        openid=request.openid,
-        nickname=request.nickname,
-        sex=request.sex,
-        province=request.province,
-        city=request.city,
-        country=request.country,
-        headimgurl=request.headimgurl,
-        privilege=request.privilege,
+        unionid=user.unionid,
+        openid=user.openid,
+        nickname=user.nickname,
+        sex=user.sex,
+        province=user.province,
+        city=user.city,
+        country=user.country,
+        headimgurl=user.headimgurl,
+        privilege=user.privilege,
         )
     except Exception as e:
         await session.rollback()
