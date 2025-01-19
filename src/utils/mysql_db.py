@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from api.protocols import *
 from db.conversation_model import ConversationModel
 from db.message_model import MessageModel
-
+from utils.session import with_async_session
 from passlib.hash import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -22,8 +22,16 @@ from sqlalchemy.orm import selectinload
 from utils.session import get_async_db
 from sqlalchemy import desc
 from fastapi import HTTPException
+
+#查询unionid的记录
+with_async_session
+async def search_unionid_sql(session,  unionid: str = None):
+    result = await session.execute(select(UserModel).where(UserModel.unionid == unionid))
+    user = result.scalars().first()
+    return user
 #添加用户记录sql
-async def add_user_sql(session:AsyncSession= Depends(get_async_db),  request: AddUserRequest = Body(...)):
+with_async_session
+async def add_user_sql(session,  request: AddUserRequest = None):
     try:
         user = UserModel(
         unionid=request.unionid,
@@ -278,9 +286,10 @@ async def insert_user_input_sql(
         )
     
 #插入单一会话内部-AI回复sql
+@with_async_session
 async def insert_ai_input_sql(
-        session: AsyncSession = Depends(get_async_db),
-        request: InsertAIInputSessionRequest = Body(...)        
+        session,
+        request: InsertAIInputSessionRequest = None      
 ):
     try:
         result = await session.execute(select(MessageModel).filter_by(id=request.id))

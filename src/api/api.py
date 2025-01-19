@@ -16,9 +16,10 @@ import uuid
 from datetime import datetime
 
 #用户注册
+@with_async_session
 async def add_user(
-        request: AddUserRequest = Body(...),
-        session: AsyncSession = Depends(get_async_db)
+        session,
+        request: AddUserRequest = None,
 ):
     return await add_user_sql(session,request)
 
@@ -67,9 +68,11 @@ async def insert_user_input(
 
 #后端接口，没有放在路由上
 #插入单一会话内部-AI回复
+@with_async_session
 async def insert_ai_input(
-        request: InsertAIInputSessionRequest = Body(...),
-        session: AsyncSession = Depends(get_async_db)        
+        session,
+        request: InsertAIInputSessionRequest = None
+              
 ):
     return await insert_ai_input_sql(session,request)
 
