@@ -41,9 +41,10 @@ WECHAT_APP_SECRET = os.getenv("WECHAT_APP_SECRET", "")
 WECHAT_REDIRECT_URI = os.getenv("WECHAT_REDIRECT_URI", "")
 
 # JWT 配置
-SECRET_KEY = "your-secret-key"  # 用于签名和验证 JWT 的密钥
-ALGORITHM = "HS256"  # 加密算法
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # JWT Token 过期时间
+SECRET_KEY = os.getenv("SECRET_KEY", "") # 用于签名和验证 JWT 的密钥
+ALGORITHM = os.getenv("ALGORITHM", "HS256") # 加密算法
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # JWT Token 过期时间
+
 
 # OAuth2密码Bearer令牌
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

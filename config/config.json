@@ -2,12 +2,5 @@
     "log": {
         "log_level": "DEBUG",
         "log_path": "/log"
-    },
-    "msyql": {
-        "host": "127.0.0.1",
-        "port": 3306,
-        "user": "molly",
-        "password": "molly@2025",
-        "database": "molly"
     }
 }

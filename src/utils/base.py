@@ -3,37 +3,19 @@ from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy.orm import sessionmaker
 from urllib.parse import quote_plus
 import os
+from dotenv import load_dotenv
 
 import json
 
-def load_config(config_path=None):
-    if config_path is None:
-        # 获取当前脚本所在目录的绝对路径
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        # 构建 config.json 的完整路径
-        config_path = os.path.join(current_dir, '../..', 'config', 'config.json')
-    
-    try:
-        with open(config_path, 'r') as f:
-            config_data = json.load(f)
-        return config_data
-    except FileNotFoundError:
-        print(f"配置文件 {config_path} 未找到。")
-        return {}
-    except json.JSONDecodeError:
-        print(f"读取配置文件 {config_path} 时发生错误，可能是格式错误。")
-        return {}
+load_dotenv()
 
-config_data=load_config()
-mysql_config = config_data.get('msyql', {})
-
-user = mysql_config.get('user', 'default_user')
-host = mysql_config.get('host', 'default_host')
-port=mysql_config.get('port', 'default_host')
-database = mysql_config.get('database', 'default_database')
-password = mysql_config.get('password', 'default_password')
+user = os.getenv("DB_USER", "")
+host = os.getenv("DB_HOST", "")
+port= int(os.getenv("DB_PORT", "-1"))
+database = os.getenv("DB_NAME", "")
+password = os.getenv("DB_PASSWORD", "")
 encoded_password = quote_plus(password)
-""
+
 SQLALCHEMY_DATABASE_URI = f"mysql+asyncmy://{user}:{encoded_password}@{host}:{port}/{database}?charset=utf8mb4"
 
 async_engine = create_async_engine(
