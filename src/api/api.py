@@ -1,27 +1,26 @@
-from utils.mysql_db import *
+from src.utils.mysql_db import *
+from src.utils.mysql_db import search_sessions_sql
 import copy
 import logging
 from typing import List
-from utils.session import get_async_db
-from utils.session import with_async_session
+from src.utils.session import get_async_db
+from src.utils.session import with_async_session
 from fastapi import BackgroundTasks
-from config import g_config
+from src.config import g_config
 from .protocols import *
-from constants import CodeAgentState
+from src.constants import CodeAgentState
 
 from fastapi import HTTPException, Depends, Body
 from sqlalchemy.ext.asyncio import AsyncSession
-from db.user_model import UserModel
-import uuid
+from src.db.user_model import UserModel
+
 from datetime import datetime
 
 #用户注册
-@with_async_session
 async def add_user(
-        session,
         request: AddUserRequest = None,
 ):
-    return await add_user_sql(session,request)
+    return await add_user_sql(request)
 
 #查询用户信息
 async def query_user_info(
@@ -36,9 +35,10 @@ async def delete_specific_session(
         session: AsyncSession = Depends(get_async_db)
 ):
     return await delete_specific_session_sql(session,request)
+
 #清空所有会话
 async def delete_sessions(
-        request: SessionsRequest = Body(...),
+        request: DelAllSessionsRequest = Body(...),
         session: AsyncSession = Depends(get_async_db)
 ):
    return await delete_sessions_sql(session,request)
@@ -82,3 +82,31 @@ async def add_sessions(
         request: AddSessionRequest = Body(...)        
 ):
     return await add_sessions_sql(session,request)
+
+#返回会话id
+async def get_new_session_id(
+        session: AsyncSession = Depends(get_async_db),
+        request: AddSessionRequest = Body(...)        
+):
+    return await get_new_session_id_sql(session,request)
+
+
+
+# 使用 UPSERT 操作更新或插入 conversation 记录
+async def upsert_conversation(
+        conversation_id: str,      
+        unionid: str,
+        prompt:str
+):
+    return await upsert_conversation_sql(conversation_id, unionid,prompt)
+
+#更改会话名称
+async def update_session_name(
+        session: AsyncSession = Depends(get_async_db),
+        request: UpdateSessionRequest = Body(...)        
+):
+    return await update_session_name_sql(session,request)
+
+
+
+

@@ -3,7 +3,7 @@ import sys
 import platform
 import logging
 import logging.config as log_config
-from config import g_config
+from src.config import g_config
 
 # 判断操作系统类型
 if platform.system() == "Linux":

@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey, func, CHAR
+from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey, func, CHAR,Text
 from sqlalchemy.orm import relationship
-from utils.base import Base
+from src.utils.base import Base
+from src.db.tool_model import ToolModel
 
 
 class MessageModel(Base):
@@ -12,9 +13,11 @@ class MessageModel(Base):
 
     conversation_id = Column(CHAR(36), ForeignKey('conversation.id'), comment='会话ID')
 
-    query = Column(String(4096), comment='用户问题')
+    # query = Column(String(4096), comment='用户问题')
+    query = Column(Text, comment='用户问题')
 
-    response = Column(String(4096), comment='模型回答')
+    # response = Column(String(4096), comment='模型回答')
+    response = Column(Text, comment='模型回答')
     
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
 
@@ -26,6 +29,9 @@ class MessageModel(Base):
     feedback_reason = Column(String(255), default="", comment="用户评分理由")
 
     conversations = relationship('ConversationModel', back_populates='messages')
+
+    # 关联到 ToolModel，并指定按 create_time 升序排序
+    tools = relationship('ToolModel', back_populates='message', order_by='ToolModel.create_time')
 
     def __repr__(self):
         return f"<Message(id='{self.id}', chat_type='{self.chat_type}', query='{self.query}', response='{self.response}', meta_data='{self.meta_data}', feedback_score='{self.feedback_score}', feedback_reason='{self.feedback_reason}', create_time='{self.create_time}')>"

@@ -1,21 +1,23 @@
-import httpx
 import os
+import json
+import asyncio
+import shutil
 
+import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, Response
-from fastapi import HTTPException, status
+from fastapi import HTTPException, FastAPI, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from utils import logger
-from utils.mysql_db import search_unionid_sql
-from api.api import *
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.responses import StreamingResponse
 
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
-from src.db.user_token_model import UserToken
-from datetime import datetime, timedelta, timezone
-
-
+from src.utils import logger
+from src.utils.mysql_db import search_unionid_sql
+from src.api.api import *
+#from src.db.uploadfiles_model import UploadedFile
+from src.model.openai_engine import proxy_stream_generator
+from src.utils.jwt_util import create_system_token
+from src.file.upload_router import router as upload_router
+from src.api.protocols import UserInput
+from pydantic import ValidationError
 
 logger.info(f"========================start molly backend==============================")
 
@@ -34,7 +36,6 @@ app.add_middleware(
 )
 
 load_dotenv()
-
 # 微信开放平台应用的 AppID 和 AppSecret
 WECHAT_APP_ID = os.getenv("WECHAT_APP_ID", "")
 WECHAT_APP_SECRET = os.getenv("WECHAT_APP_SECRET", "")
@@ -45,64 +46,16 @@ SECRET_KEY = os.getenv("SECRET_KEY", "") # 用于签名和验证 JWT 的密钥
 ALGORITHM = os.getenv("ALGORITHM", "HS256") # 加密算法
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # JWT Token 过期时间
 
+# # 附件存储目录
+# UPLOAD_DIR = "./files/upload"
 
-# OAuth2密码Bearer令牌
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-# 生成 JWT Token,并添加到数据库中
-with_async_session
-async def create_system_token(session,unionid: str, wechat_access_token: str):
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode = {"sub": unionid, "exp": expire}
-    system_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    db_token = UserToken(
-        id=str(uuid.uuid4()),
-        unionid=unionid,
-        wechat_access_token=wechat_access_token,
-        system_token=system_token,
-        expires_at=expire,
-        create_time=datetime.now()
-    )
-    session.add(db_token)
-    session.commit()
-    session.refresh(db_token)
-    return system_token
-
-# 解码并验证 JWT Token
-def decode_token(token: str):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-        )
- # 获取当前用户记录   
-async def get_current_user(token: str = Depends(oauth2_scheme),session:AsyncSession= Depends(get_async_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        unionid: str = payload.get("sub")
-        if unionid is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    user_token = session.query(UserToken).filter(UserToken.unionid == unionid).first()
-    if user_token is None:
-        raise credentials_exception
-    return user_token    
 
 @app.get("/")
 def read_root():
     return {"Hello": "我是Molly后端服务"}
 
-@app.get("/wechat_callback")
-async def wechat_callback(code: str, state: str,request: Response):
+@app.get("/backend/wechat_callback")
+async def wechat_callback(code: str):
 
     # 1. 使用 code 获取 access_token
     token_url = f"https://api.weixin.qq.com/sns/oauth2/access_token?appid={WECHAT_APP_ID}&secret={WECHAT_APP_SECRET}&code={code}&grant_type=authorization_code"
@@ -128,9 +81,14 @@ async def wechat_callback(code: str, state: str,request: Response):
         raise ValueError("未获取到unionid")
     
     #判断用户表是否已经存在记录
-    user=search_unionid_sql(unionid=unionid)
-    
+    user=await search_unionid_sql(unionid=unionid)
+    print(".........................")
+    print(user)
+    print(".........................")
     if not user:
+        #将privilege字段转成字符串
+        if isinstance(user_info.get("privilege"), list):
+            user_info["privilege"] = ",".join(user_info["privilege"])
     # 创建 AddUserRequest 实例
         add_user_request = AddUserRequest(
             unionid=user_info.get("unionid"),  # 用户统一标识（必填）
@@ -141,46 +99,224 @@ async def wechat_callback(code: str, state: str,request: Response):
             city=user_info.get("city"),          # 普通用户个人资料填写的城市（可选）
             country=user_info.get("country"),    # 国家，如中国为CN（可选）
             headimgurl=user_info.get("headimgurl"),  # 用户头像 URL（可选）
-            privilege=user_info.get("privilege")     # 用户特权信息（可选）
+            privilege=user_info.get("privilege"),     # 用户特权信息（可选）
+            phone=None,  #TODO 后面需要传入的参数
+            email=None   #TODO 后面需要传入的参数
         )
 
         # 3. 入库存储用户
-        add_user(request=add_user_request)
+        await add_user(request=add_user_request)
 
     # 生成自身系统的 JWT Token,并存入user_token表中
-    access_token = await create_system_token(unionid=unionid,wechat_access_token=token_data['access_token'])
+    system_token = await create_system_token(unionid=unionid,wechat_access_token=token_data['access_token'])
 
-    # 将 JWT Token 存入 Cookie
-    request.set_cookie(
-        key="access_token",
-        value=access_token,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Cookie 过期时间（秒）
-        httponly=True,  # 确保前端只能通过 HTTP 请求访问
-        secure=True,  # 如果是生产环境，可以设置为 True，确保安全
-    )    
+
+    # print(".........................")
+    # print( {
+    #     "system_token":system_token,
+    #     "unionid": user_info.get("unionid"),
+    #     "headimgurl":user_info.get("headimgurl"),
+    #     "nickname":user_info.get("nickname")
+    # })
+    # print(".........................")
+    #TODO Userinfo_图片和昵称和system_token和unid
+    # 返回成功响应
     return {
-        "unionid": token_data['unionid'],
+        "ok": "0",
+        "failed":"",
+        "system_token": system_token,
+        "unionid": user_info.get("unionid"),
+        "headimgurl": user_info.get("headimgurl"),
+        "nickname": user_info.get("nickname")
     }
-# 受保护的路由
-@app.get("/protected")
-async def protected_route(current_user: UserToken = Depends(get_current_user)):
-    return {"message": "You are authenticated", "openid": current_user.unionid}
 
-
+#TODO dic{code：401,statu：用户状态失效}
+#TODO 200
 # app.post("/add_user",tags=["用户数据"],summary="添加用户")(add_user)
+
+# 存储每个会话的停止事件
+stop_events: Dict[str, asyncio.Event] = {}
+
+# @app.post("/backend/chat")
+# async def chat(request: Request):
+#     """
+#     流式聊天接口
+#     :param request: 原始请求对象
+#     :return: StreamingResponse
+#     """
+#     # 读取请求体
+#     body = await request.body()
+#     try:
+#         # 解析请求体为 JSON
+#         data = json.loads(body.decode("utf-8"))
+#         prompt = data.get("prompt")
+#         system_token=data.get("system_token")
+#         conversation_id=data.get("conversation_id")
+#         if not prompt:
+#             raise HTTPException(status_code=422, detail="Missing 'prompt' field")
+#         if not system_token:
+#             raise HTTPException(status_code=422, detail="Missing 'system_token' field")
+#         if not conversation_id:
+#             raise HTTPException(status_code=422, detail="Missing 'conversation_id' field")        
+#     except json.JSONDecodeError:
+#         raise HTTPException(status_code=422, detail="Invalid JSON format")
+    
+#     #检验token有效性    
+#     payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+#     unionid: str = payload.get("sub")
+#     if unionid is None:
+#         raise HTTPException(
+#         status_code=status.HTTP_401_UNAUTHORIZED,
+#         detail="unionid不存在",
+#     )
+
+#     # 使用 UPSERT 操作更新或插入 conversation 记录
+#     await upsert_conversation(conversation_id, unionid, prompt)
+
+#     #将人类的输入插入数据库,并获取消息id
+#     msg_id=await insert_user_input_chat(conversation_id, query=prompt)
+
+#     # 初始化停止事件
+#     stop_event = stop_events.setdefault(conversation_id, asyncio.Event())
+#     stop_event.clear()
+
+#     # 用于存储 AI 的完整回复
+#     full_response = ""
+
+#     # 将数据包装为 SSE 格式
+#     async def generate_sse():
+#         nonlocal full_response
+#         try:
+#             async for chunk in deepseek_model.generate_stream(prompt):
+#                 #判断是否停止
+#                 if stop_event.is_set():
+#                     break
+#                 # 将 chunk 拼接到 full_response 中
+#                 full_response += chunk
+#                 # 每条消息以 "data:" 开头，并以两个换行符结尾
+#                 yield f"data: {chunk}\n\n"
+#             # 流式处理完成后，将完整的 AI 回复插入数据库
+#             await insert_ai_input_sql(msg_id=msg_id,response=full_response)
+#         finally:
+#             if conversation_id in stop_events:
+#                 del stop_events[conversation_id]            
+
+#     return StreamingResponse(
+#         generate_sse(),  # 使用包装后的生成器
+#         media_type="text/event-stream",  # 设置正确的 media_type
+#         headers={"Content-Type": "text/event-stream; charset=UTF-8"}  # 显式设置字符集
+# )
+@app.post("/backend/chat")
+async def backend_chat(request: Request) -> StreamingResponse:
+    """
+    代理聊天接口，流式转发到目标服务器
+    """
+    try:
+        # 手动解析请求体
+        raw_body = await request.body()
+        logger.info(f"Raw request body: {raw_body.decode('utf-8')}")  # 关键日志1：原始字节数据
+        
+        # 转换为JSON并记录
+        body = await request.json()
+        logger.info(f"Parsed JSON body: {json.dumps(body, ensure_ascii=False)}")  # 关键日志2：结构化数据
+        
+        # 手动验证模型
+        user_input = UserInput(**body)
+        logger.info(f"Validated model: {user_input.dict()}")  # 关键日志3：验证后的模型数据
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON解析失败: {str(e)}")
+        raise HTTPException(status_code=422, detail="Invalid JSON format")
+        
+    except ValidationError as e:
+        logger.error(f"模型验证失败: {e.errors()}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=e.errors(),
+        )
+        
+    except Exception as e:
+        logger.exception("未捕获的异常:")  # 记录完整堆栈
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        )
+    
+    #检验token有效性    
+    payload = decode_vaild(user_input.system_token, SECRET_KEY, algorithms=[ALGORITHM])
+    unionid: str = payload.get("sub")
+    if unionid is None:
+        raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="unionid不存在",
+    )
+
+    conversation_id=user_input.conversation_id
+    prompt=user_input.prompt
+    
+    # 使用 UPSERT 操作更新或插入 conversation 记录
+    await upsert_conversation(conversation_id, unionid, prompt)
+
+    #将人类的输入插入数据库,并获取消息id
+    msg_id=await insert_user_input_chat(conversation_id, query=prompt)
+    print(msg_id)
+    return StreamingResponse(
+        proxy_stream_generator(user_input,msg_id),  # 直接调用函数，传入参数
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
+
+@app.post("/backend/stop")
+async def stop(request: Request):
+    body = await request.body()
+    try:
+        data = json.loads(body.decode("utf-8"))
+        system_token=data.get("system_token")
+        conversation_id = data.get("conversation_id")
+        if not system_token:
+            raise HTTPException(status_code=422, detail="Missing 'system_token' field")
+        if not conversation_id:
+            raise HTTPException(status_code=422, detail="Missing 'conversation_id' field")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="Invalid JSON format")
+    
+    #检验token有效性    
+    payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+    unionid: str = payload.get("sub")
+    if unionid is None:
+        raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="unionid不存在",
+    )
+    # 设置停止事件
+    if conversation_id in stop_events:
+        stop_events[conversation_id].set()
+    return {"status": "200"}
+
+app.include_router(upload_router, prefix="/backend")
 
 app.post("/query_user_info",tags=["用户数据"],summary="查询用户信息")(query_user_info)
 
-app.post("/delete_specific_session",tags=["会话数据"],summary="删除特定会话")(delete_specific_session)#
+app.post("/backend/delete_specific_session",tags=["会话数据"],summary="删除特定会话")(delete_specific_session)#
 
-app.post("/delete_sessions",tags=["会话数据"],summary="删除全部会话")(delete_sessions)
+app.post("/backend/delete_sessions",tags=["会话数据"],summary="删除全部会话")(delete_sessions)
 
-app.post("/search_specific_session",tags=["会话数据"],summary="查询单一会话")(search_specific_session)
+app.post("/backend/search_specific_session",tags=["会话数据"],summary="查询单一会话")(search_specific_session)
 
-app.post("/search_sessions",tags=["会话数据"],summary="查询会话历史")(search_sessions)
+app.post("/backend/search_sessions",tags=["会话数据"],summary="查询会话历史")(search_sessions)
 
 app.post("/insert_user_input",tags=["消息数据"],summary="插入单一会话内部-用户输入")(insert_user_input)
 
-app.post("/add_sessions",tags=["会话数据"],summary="新建会话记录信息")(add_sessions)
+app.post("/backend/add_sessions",tags=["会话数据"],summary="新建会话记录信息")(add_sessions)
+
+app.post("/backend/get_new_session_id",tags=["会话数据"],summary="返回会话id")(get_new_session_id)
+
+app.post("/backend/update_session_name",tags=["会话数据"],summary="更改会话名称")(update_session_name)
 
 # 补充

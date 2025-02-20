@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, CHAR, DateTime,func,Integer
 from sqlalchemy.orm import relationship
-from utils.base import Base
-from db.conversation_model import ConversationModel
+from src.utils.base import Base
+from src.db.conversation_model import ConversationModel
 class UserModel(Base):
     __tablename__ = 'user'
 
@@ -22,6 +22,10 @@ class UserModel(Base):
     headimgurl = Column(String(512), comment='用户头像，最后一个数值代表正方形头像大小')
     
     privilege = Column(String(512), comment='用户特权信息，json数组，如微信沃卡用户为（chinaunicom）')
+
+    phone = Column(String(20), comment='用户手机号')
+    
+    email = Column(String(128), comment='用户邮箱')
 
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
 

@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
-from utils.base import AsyncSessionLocal
+from src.utils.base import AsyncSessionLocal
 from functools import wraps
 
 @asynccontextmanager

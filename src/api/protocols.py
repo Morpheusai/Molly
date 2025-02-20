@@ -1,6 +1,11 @@
 from pydantic import BaseModel
 from typing import Optional,List,Dict,Any
+from datetime import datetime
 
+from pydantic import BaseModel, Field, SerializeAsAny
+from typing_extensions import TypedDict
+
+from src.model.models import AllModelEnum, OpenAIModelName
 
 #基础响应模型
 class BaseResponse(BaseModel):
@@ -18,6 +23,8 @@ class AddUserRequest(BaseModel):
     country: Optional[str] = None  # 国家，如中国为CN（可选）
     headimgurl: Optional[str] = None  # 用户头像 URL（可选）
     privilege: Optional[str] = None  # 用户特权信息（可选）
+    phone:Optional[str] = None #用户手机号（可选）
+    email:Optional[str] = None #用户邮箱（可选）
 
 #查询用户信息请求模型    
 class QueryUserInfoRequest(BaseModel):
@@ -40,22 +47,34 @@ class QueryUserInfoResponse(BaseModel):
 
 #删除单一会话的请求模型
 class DeleteSessionRequest(BaseModel):
-    user_id: str     # 微信用户 unionid
+    system_token:str #系统token
     session_id: str  # 会话 ID  
 
-#清空所有会话请求模型/查询会话历史请求模型
+#查询会话历史请求模型
 class SessionsRequest(BaseModel):
-    user_id: str     # 微信用户 unionid
+    # user_id: str     # 微信用户 unionid
+    system_token: str
+
+#清空所有会话请求模型
+class DelAllSessionsRequest(BaseModel):
+    system_token:str #系统token
+
+
 
 #查询单一会话请求模型
 class QuerySingleSessionRequest(BaseModel):
-    user_id: str     # 微信用户 unionid
+    system_token:str #系统token
     session_id: str  # 会话 ID    
 
 #单条会话信息
+#TODO 创建时间、更新时间
 class SessionItem(BaseModel):
     session_id: str  # 会话 ID
     session_title: str  # 会话标题
+    updata_time: str   # 更新时间
+    create_time: str  # 创建时间    
+
+    
 #查询会话历史响应模型
 class QuerySessionsResponse(BaseModel):
     ok: int          # 0 表示成功，非 0 表示失败
@@ -64,15 +83,34 @@ class QuerySessionsResponse(BaseModel):
 
 #单条聊天记录
 class ChatItem(BaseModel):
-    query: str = None  # 用户输入
-    response: str = None  # AI 回复
-# 单一会话的响应模型   
+    query: Optional[str] = None  # 用户输入
+    response: Optional[str] = None  # AI 回复
+
+class ToolItem(BaseModel):
+    tool_name: str
+    tool_args: str
+    tool_result: str
+    create_time: str
+
+class ChatItemWithTools(BaseModel):
+    id: str
+    query: str
+    response: str
+    create_time: str
+    tools: List[ToolItem]
+
 class QuerySessionResponse(BaseModel):
-    user_id: str     # 微信用户 unionid
-    session_id: str  # 会话 ID
-    ok: int          # 0 表示成功，非 0 表示失败
-    failed: str      # 空表示成功，否则是出错信息
-    chats: List[ChatItem]  # 聊天记录列表   
+    ok: int
+    failed: str
+    session_id: str
+    chats: List[ChatItemWithTools]
+
+# 单一会话的响应模型   
+# class QuerySessionResponse(BaseModel):
+#     session_id: str  # 会话 ID
+#     ok: int          # 0 表示成功，非 0 表示失败
+#     failed: str      # 空表示成功，否则是出错信息
+#     chats: List[ChatItem]  # 聊天记录列表   
 
 #插入单一会话（用户输入）请求模型
 class InsertUserInputSessionRequest(BaseModel):
@@ -90,8 +128,29 @@ class InsertAIInputSessionRequest(BaseModel):
           
 #新建会话请求模型
 class AddSessionRequest(BaseModel):
-    user_id: str     # 微信用户 unionid
+    system_token:str
     session_title: Optional[str] = "新会话"    # 会话标题  
     chat_type: Optional[str] = None   # 聊天类型
 
+#聊天消息请求模型
+class ChatRequest(BaseModel):
+    prompt: str
+
+#新建会话记录响应模型
+class SessionResponse(BaseResponse):
+    conversation_id: str
+
+#更改会话名称请求模型    
+class UpdateSessionRequest(BaseModel):
+    system_token:str
+    session_id: str  # 会话 ID 
+    session_title: Optional[str] = "新会话"    # 会话标题     
+
+#用户输入请求模型
+class UserInput(BaseModel):
+    """Basic user input for the agent."""
+
+    prompt: str           #用户输入
+    system_token: str     #系统token
+    conversation_id: str  #会话id
 

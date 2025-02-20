@@ -1,8 +1,8 @@
 
 from sqlalchemy import Column, String, CHAR, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
-from utils.base import Base
-from db.message_model import MessageModel
+from src.utils.base import Base
+from src.db.message_model import MessageModel
 
 class ConversationModel(Base):
     __tablename__ = 'conversation'
@@ -20,12 +20,16 @@ class ConversationModel(Base):
     chat_type = Column(String(50), comment="聊天类型")
 
     # 时间字段
+    updata_time=Column(DateTime, default=func.now(), comment='更新时间')#TODO 更新时间
+
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
 
     # 关系字段
     users = relationship('UserModel', back_populates='conversations')
 
     messages = relationship('MessageModel', back_populates='conversations')
+
+    uploaded_files = relationship('UploadedFile', back_populates='conversation')###
 
     def __repr__(self):
         return f"<Conversation(id='{self.id}', user_id='{self.user_id}', session_title='{self.session_title}')>"
