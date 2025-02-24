@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from src.api.protocols import *
 from src.db.conversation_model import ConversationModel
 from src.db.message_model import MessageModel
+from src.db.uploadfiles_model import UploadedFile
 from src.db.tool_model import ToolModel
 from src.utils.session import with_async_session
 from passlib.hash import bcrypt
@@ -28,6 +29,7 @@ from jose import JWTError, jwt
 from src.utils.jwt_util import decode_vaild
 import os
 import json
+import ast
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -145,6 +147,12 @@ async def delete_specific_session_sql(
             .where(MessageModel.conversation_id == request.session_id)
         )
 
+        #删除于会话关联的上传文件信息
+        await session.execute(
+            delete(UploadedFile)
+            .where(UploadedFile.conversation_id == request.session_id)
+        )
+
   
 
         # 删除会话
@@ -227,33 +235,43 @@ async def search_specific_session_sql(
     """
     查询单一会话历史的逻辑
     """
-    #检验token有效性    
+    # 检验token有效性    
     payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
         raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="unionid不存在",
-    )
-
-    try:
-        # 使用 selectinload 异步加载关联的 tools 数据（比 joinedload 更适合异步）
-        query = (
-            select(MessageModel)
-            .where(MessageModel.conversation_id == request.session_id)
-            .options(selectinload(MessageModel.tools))  # 关键改动：加载关联工具
-            .order_by(desc(MessageModel.create_time))
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="unionid不存在",
         )
 
-        result = await session.execute(query)
-        message_data = result.scalars().unique().all()
+    try:
+        # 查询会话历史消息
+        message_query = (
+            select(MessageModel)
+            .where(MessageModel.conversation_id == request.session_id)
+            .options(selectinload(MessageModel.tools))  # 加载关联工具
+            .order_by(desc(MessageModel.create_time))
+        )
+        message_result = await session.execute(message_query)
+        message_data = message_result.scalars().unique().all()
 
-        if not message_data:
+        # 查询会话关联的文件
+        file_query = (
+            select(UploadedFile)
+            .where(UploadedFile.conversation_id == request.session_id)
+            .order_by(desc(UploadedFile.create_time))
+        )
+        file_result = await session.execute(file_query)
+        file_data = file_result.scalars().unique().all()
+
+        # 如果没有消息和文件，返回空结果
+        if not message_data and not file_data:
             return QuerySessionResponse(
                 ok=1,
-                failed="Message not found",
+                failed="No data found",
                 session_id=request.session_id,
-                chats=[]
+                chats=[],
+                files=[]
             )
 
         # 构建带工具信息的响应
@@ -278,11 +296,21 @@ async def search_specific_session_sql(
                 tools=tools
             ))
 
+        # 构建文件信息响应
+        files = [
+            FileItem(
+                file_name=file.file_name,
+                file_path=file.file_path
+            )
+            for file in file_data
+        ]
+
         return QuerySessionResponse(
             ok=0,
             failed="",
             session_id=request.session_id,
-            chats=chats
+            chats=chats,
+            files=files  # 添加文件信息
         )
 
     except Exception as e:
@@ -291,7 +319,8 @@ async def search_specific_session_sql(
             ok=1,
             failed=str(e),
             session_id=request.session_id,
-            chats=[]
+            chats=[],
+            files=[]
         )
 
 
@@ -598,7 +627,8 @@ async def process_messages(
     msg_id: str,
     conversation_id: str,
     ai_messages: List[Dict],
-    tool_messages: List[Dict]
+    tool_messages: List[Dict],
+    full_response:str
 ):
 
     # 第一步：更新 message 表的 response 字段
@@ -610,17 +640,17 @@ async def process_messages(
     #     if content.get("content"):
     #         final_ai_content = content.get("content")
     #         break
-    ai_msg=ai_messages[-1]
-    content = ai_msg.get("content", {})   
-    if content.get("content"): 
-        final_ai_content = content.get("content")
+    # ai_msg=ai_messages[-1]
+    # content = ai_msg.get("content", {})   
+    # if content.get("content"): 
+    #     final_ai_content = content.get("content")
 
     # 更新 message 表的 response 字段
     try:
         result = await session.execute(select(MessageModel).filter_by(id=msg_id))
         m=result.scalars().first()
         if m is not None:
-            m.response = final_ai_content
+            m.response = full_response
             session.add(m)
             await session.commit()
     except Exception as e:
@@ -647,12 +677,20 @@ async def process_messages(
     for tool_msg in tool_messages:
         content = tool_msg.get("content", {})
         tool_call_id = content.get("tool_call_id")
-        
         if tool_call_id in tool_calls_map:
             tool_info = tool_calls_map[tool_call_id]
             new_id = str(uuid.uuid4())
             # 获取当前时间
-            current_time = datetime.now()         
+            current_time = datetime.now()  
+
+            # 解析 tool_result
+            tool_result_str = content.get('content', '')
+            try:
+                tool_result_dict = ast.literal_eval(tool_result_str)
+                print(tool_result_dict)
+            except (SyntaxError, ValueError) as e:
+                print(f"解析 tool_result 失败: {e}")
+                tool_result_dict = {}  # 如果解析失败，设置为空字典     
             tool_models.append(
                 ToolModel(
                     id=new_id,
@@ -660,12 +698,16 @@ async def process_messages(
                     conversation_id=conversation_id,
                     tool_id=tool_call_id,
                     tool_name=tool_info["name"],
-                    tool_args=json.dumps(tool_info["args"]),  # 将 args 转为 JSON 字符串
+                    tool_args=tool_info["args"],  # 将 args 转为 JSON 字符串
                     #tool_result=content.get('content', ''), #当前工具返回的是一个json，text/link
-                    tool_result=json.dumps(content.get('content', '')), #当前工具返回的是一个json，text/link
+                    tool_result=tool_result_dict, #当前工具返回的是一个json，text/link
                     create_time=current_time,
                 )
             )
+                
+
+            
+        
     # 批量插入工具数据
     if tool_models:
         try:

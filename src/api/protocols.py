@@ -31,7 +31,6 @@ class QueryUserInfoRequest(BaseModel):
     openid : str  # 普通用户的标识，对当前开发者账号唯一
     unionid: str     # 用户统一标识。针对一个微信开放平台账号下的应用，同一用户的unionid是唯一的    
 
-
 #查询用户信息响应模型
 class QueryUserInfoResponse(BaseModel):
     unionid: str  # 用户统一标识。针对一个微信开放平台账号下的应用，同一用户的unionid是唯一的
@@ -88,22 +87,27 @@ class ChatItem(BaseModel):
 
 class ToolItem(BaseModel):
     tool_name: str
-    tool_args: str
-    tool_result: str
+    tool_args: Dict[str, Any]  # 使用字典类型表示 JSON 对象
+    tool_result: Dict[str, Any]  # 使用字典类型表示 JSON 对象
     create_time: str
 
 class ChatItemWithTools(BaseModel):
     id: str
     query: str
-    response: str
+    response: Optional[str] = None
     create_time: str
-    tools: List[ToolItem]
+    tools: Optional[List[ToolItem]] = None
+
+class FileItem(BaseModel):
+    file_name: str
+    file_path: str
 
 class QuerySessionResponse(BaseModel):
     ok: int
     failed: str
     session_id: str
-    chats: List[ChatItemWithTools]
+    chats: Optional[List[ChatItemWithTools]] = None  # 可以是 None 或 List[ChatItemWithTools]
+    files: Optional[List[FileItem]] = None  # 可以是 None 或 List[FileItem]
 
 # 单一会话的响应模型   
 # class QuerySessionResponse(BaseModel):
@@ -146,11 +150,17 @@ class UpdateSessionRequest(BaseModel):
     session_id: str  # 会话 ID 
     session_title: Optional[str] = "新会话"    # 会话标题     
 
-#用户输入请求模型
+class FileInfo(BaseModel):
+    file_name: str = Field(description="文件名")
+    file_content: str = Field(description="文件内容")
+
+class FileGroup(BaseModel):
+    conversation_id: Optional[str] = Field(description="会话 ID，UUID 格式，长度 36", max_length=36, min_length=36)
+    files: List[FileInfo] = Field(description="文件列表")
+
 class UserInput(BaseModel):
-    """Basic user input for the agent."""
-
-    prompt: str           #用户输入
-    system_token: str     #系统token
-    conversation_id: str  #会话id
-
+    """User input processed by the FastAPI server and sent to the target server."""
+    prompt: str = Field(description="用户输入")
+    system_token: str = Field(description="系统token")
+    conversation_id: str = Field(description="会话id")
+    file_list: List[FileGroup] = Field(description="传入文件列表", default=[])

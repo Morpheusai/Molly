@@ -16,8 +16,15 @@ from src.db.uploadfiles_model import UploadedFile
 from src.utils.session import get_async_db
 from src.utils.base import AsyncSessionLocal
 from src.utils.log import logger
+from src.utils.mysql_db import upsert_conversation_sql
+from src.utils.jwt_util import decode_vaild
 
 load_dotenv()
+
+# JWT 配置
+SECRET_KEY = os.getenv("SECRET_KEY", "") # 用于签名和验证 JWT 的密钥
+ALGORITHM = os.getenv("ALGORITHM", "HS256") # 加密算法
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # JWT Token 过期时间
 
 router = APIRouter(tags=["file-upload"])
 
@@ -39,11 +46,12 @@ minio_client = Minio(
 if not minio_client.bucket_exists(bucket_name):
     minio_client.make_bucket(bucket_name)
 
-
 @router.post("/upload")
 async def upload_attachments(
     files: List[UploadFile] = File(...),
-    conversation_id: str = Body(...)
+    conversation_id: str = Body(...),
+    system_token: str = Body(..., description="系统token"),
+    session_title: str = Body(default="file chat"),
 ) -> Dict:
     """Upload multiple files to MinIO concurrently with independent sessions.
 
@@ -56,6 +64,21 @@ async def upload_attachments(
     """
     # Define a helper function to process each file with its own session
     sem = asyncio.Semaphore(10)
+
+    try:
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if unionid is None:
+            raise HTTPException(status_code=401, detail="unionid不存在")
+    except Exception as e:
+        logger.error(f"Token validation failed: {str(e)}")
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+    # 确保 conversation 存在
+    try:
+        await upsert_conversation_sql(conversation_id, unionid, session_title)
+    except Exception as e:
+        logger.error(f"Failed to upsert conversation {conversation_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to initialize conversation: {str(e)}")
     async def process_file(file: UploadFile):
         async with sem, AsyncSessionLocal() as session:
             return await upload_attachment(file, conversation_id, session)
@@ -65,6 +88,7 @@ async def upload_attachments(
 
     # 处理返回结果
     response = {
+        "ok":0,
         "message": "Attachments processed",
         "attachments_info": []
     }
@@ -75,13 +99,10 @@ async def upload_attachments(
             response["attachments_info"].append({"error": str(info)})
         else:
             response["attachments_info"].append(info)
-
     if has_errors:
+        response["result"] = 1,
         response["message"] = "Some attachments failed to process"
     return response
-
-
-
 async def calculate_file_hash(file_data: bytes) -> str:
     """Calculate the SHA-256 hash of file content asynchronously.
 
@@ -116,7 +137,8 @@ async def insert_file_info_to_db(session: AsyncSession, conversation_id: str, fi
             file_size=file_info['file_size'],#文件大小
             file_path=file_info['file_path'],#minio文件路径
             file_hash=file_info['file_hash'],#文件内容哈希值
-            file_status=file_info['file_status']#文件状态
+            file_status=file_info['file_status'],#文件状态
+            file_origin=file_info['file_origin']#用户上传
         )
         session.add(uploaded_file)
         await session.commit()
@@ -140,7 +162,8 @@ async def check_existing_file(session: AsyncSession, conversation_id: str, file_
     query = select(UploadedFile).where(
         UploadedFile.conversation_id == conversation_id,
         UploadedFile.file_hash == file_hash,
-        UploadedFile.file_status == True  # 只检查成功上传的文件
+        UploadedFile.file_status == True , # 只检查成功上传的文件(包括agent输出，用户上传)
+        UploadedFile.file_origin == 0
     )
     result = await session.execute(query)
     existing_file = result.scalars().first()
@@ -193,9 +216,9 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
                 "file_name": existing_file.file_name,
                 "file_path": existing_file.file_path,
                 "file_hash": existing_file.file_hash,
-                "file_status": existing_file.file_status
+                "file_status": existing_file.file_status,
+                "file_origin": existing_file.file_origin
             }
-          
         # Prepare file metadata
         file_info = {
             "file_id": file_id,
@@ -204,9 +227,9 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
             "file_type": file.content_type,
             "file_path": file_path,
             "file_hash": file_hash,
-            "file_status": False  # 默认失败，成功时改为 True
+            "file_status": False,  # 默认失败，成功时改为 True
+            "file_origin": 0
         }
-
         # Upload to MinIO asynchronously
         await upload_to_minio(
             bucket_name,
