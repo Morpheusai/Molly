@@ -133,11 +133,19 @@ async def delete_specific_session_sql(
             )
 
     try:
+        # 删除与会话关联的所有工具
+        await session.execute(
+            delete(ToolModel)
+            .where(ToolModel.conversation_id == request.session_id)
+        )      
+
         # 删除与会话关联的所有消息
         await session.execute(
             delete(MessageModel)
             .where(MessageModel.conversation_id == request.session_id)
         )
+
+  
 
         # 删除会话
         await session.delete(conversation)
@@ -439,8 +447,6 @@ async def insert_ai_input_sql(
             failed=str(e)
         )
 
-
-
 #新建会话记录sql
 async def add_sessions_sql(
         session: AsyncSession = Depends(get_async_db),
@@ -590,13 +596,13 @@ async def update_session_name_sql(
 async def process_messages(
     session,
     msg_id: str,
+    conversation_id: str,
     ai_messages: List[Dict],
     tool_messages: List[Dict]
 ):
 
     # 第一步：更新 message 表的 response 字段
     final_ai_content = ""
-
 
     # 找到最后一个有内容的 AI 消息
     # for ai_msg in ai_messages:
@@ -610,14 +616,13 @@ async def process_messages(
         final_ai_content = content.get("content")
 
     # 更新 message 表的 response 字段
-
     try:
         result = await session.execute(select(MessageModel).filter_by(id=msg_id))
         m=result.scalars().first()
         if m is not None:
             m.response = final_ai_content
             session.add(m)
-            # await session.commit()
+            await session.commit()
     except Exception as e:
         await session.rollback()
         return BaseResponse(
@@ -647,19 +652,20 @@ async def process_messages(
             tool_info = tool_calls_map[tool_call_id]
             new_id = str(uuid.uuid4())
             # 获取当前时间
-            current_time = datetime.now()            
+            current_time = datetime.now()         
             tool_models.append(
                 ToolModel(
                     id=new_id,
                     message_id=msg_id,  # 关联到 message 表的 ID
+                    conversation_id=conversation_id,
                     tool_id=tool_call_id,
                     tool_name=tool_info["name"],
                     tool_args=json.dumps(tool_info["args"]),  # 将 args 转为 JSON 字符串
-                    tool_result=content.get('content', ''),
+                    #tool_result=content.get('content', ''), #当前工具返回的是一个json，text/link
+                    tool_result=json.dumps(content.get('content', '')), #当前工具返回的是一个json，text/link
                     create_time=current_time,
                 )
             )
-
     # 批量插入工具数据
     if tool_models:
         try:

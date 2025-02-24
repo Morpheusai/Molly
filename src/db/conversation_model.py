@@ -3,6 +3,9 @@ from sqlalchemy import Column, String, CHAR, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 from src.utils.base import Base
 from src.db.message_model import MessageModel
+from src.db.tool_model import ToolModel
+
+
 
 class ConversationModel(Base):
     __tablename__ = 'conversation'
@@ -30,6 +33,10 @@ class ConversationModel(Base):
     messages = relationship('MessageModel', back_populates='conversations')
 
     uploaded_files = relationship('UploadedFile', back_populates='conversation')###
+
+    tools = relationship('ToolModel', back_populates='conversations')
+
+
 
     def __repr__(self):
         return f"<Conversation(id='{self.id}', user_id='{self.user_id}', session_title='{self.session_title}')>"

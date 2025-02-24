@@ -3,9 +3,9 @@ from src.api.protocols import UserInput
 import json
 from typing import AsyncGenerator, Any, List, Dict
 from src.utils.mysql_db import process_messages
+from src.utils.log import logger
 
-
-async def proxy_stream_generator(user_input: UserInput, msg_id: str) -> AsyncGenerator[str, None]:
+async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversation_id: str) -> AsyncGenerator[str, None]:
     """
     代理生成器，转发远程服务器的 SSE 流，并在流结束后进行数据库操作。
     """
@@ -14,6 +14,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str) -> AsyncGen
     
     # 构造请求参数
     json_data = user_input.dict()
+    logger.info(f"发送到目标服务器的数据: {json.dumps(json_data, ensure_ascii=False)}")
 
     # 用于存储收集到的 AI 和 Tool 消息
     ai_messages: List[Dict] = []  # 存储所有 AI 类型消息
@@ -34,7 +35,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str) -> AsyncGen
 
                 # 流式转发数据并收集 AI 和 Tool 消息
                 async for chunk in response.aiter_text():
-                    # print(chunk)
+                    # logger.debug(f"Received chunk: {chunk}")
                     yield chunk
 
                     # 解析 chunk 并判断是否为 AI 或 Tool 类型
@@ -51,12 +52,12 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str) -> AsyncGen
                                     tool_messages.append(data)
                         except json.JSONDecodeError:
                             pass
-
-        except httpx.ConnectError:
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error: {str(e)}")
             yield f"data: {json.dumps({'type': 'error', 'content': 'Connection failed'})}\n\n"
         except Exception as e:
+            logger.error(f"Stream error: {str(e)}", exc_info=True)
             yield f"data: {json.dumps({'type': 'error', 'content': f'Unexpected error1: {str(e)}'})}\n\n"
     # 处理消息
-    await process_messages(msg_id, ai_messages, tool_messages)            
-
+    await process_messages(msg_id, conversation_id, ai_messages, tool_messages)            
 
