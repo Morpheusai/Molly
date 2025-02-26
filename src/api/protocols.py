@@ -87,8 +87,8 @@ class ChatItem(BaseModel):
 
 class ToolItem(BaseModel):
     tool_name: str
-    tool_args: Dict[str, Any]  # 使用字典类型表示 JSON 对象
-    tool_result: Dict[str, Any]  # 使用字典类型表示 JSON 对象
+    tool_args: str  
+    tool_result: str  
     create_time: str
 
 class ChatItemWithTools(BaseModel):

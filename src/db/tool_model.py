@@ -15,8 +15,8 @@ class ToolModel(Base):
 
     tool_id = Column(String(128), comment='工具id')
     tool_name = Column(String(128), comment='工具名称')
-    tool_args = Column(JSON, comment='工具调用参数')
-    tool_result = Column(JSON, comment='工具返回结果')
+    tool_args = Column(Text, comment='工具调用参数')
+    tool_result = Column(Text, comment='工具返回结果')
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
 
     # 关联到MessageModel

@@ -201,11 +201,24 @@ async def delete_sessions_sql(
                     ok=0,
                     failed=""
                 )
+            
+            # 删除所有会话关联的工具
+            await session.execute(
+                delete(ToolModel).where(
+                    ToolModel.conversation_id.in_(session_ids)
+                )
+            )
 
             # 删除所有会话关联的消息
             await session.execute(
                 delete(MessageModel).where(
                     MessageModel.conversation_id.in_(session_ids)
+                )
+            )
+            # 删除所有会话关联的文件
+            await session.execute(
+                delete(UploadedFile).where(
+                    UploadedFile.conversation_id.in_(session_ids)
                 )
             )
 
@@ -287,6 +300,15 @@ async def search_specific_session_sql(
                 )
                 for tool in sorted(message.tools, key=lambda x: x.create_time)  # 双重排序保障
             ]
+
+            print("............111111")
+            print(tools)
+            # print(f"Tools for message ID {message.id}:")
+            # for tool in tools:
+            #     print(f"  - Tool Name: {tool.tool_name}")
+            #     print(f"    Tool Args: {tool.tool_args}")
+            #     print(f"    Tool Result: {tool.tool_result}")
+            #     print(f"    Create Time: {tool.create_time}")    
 
             chats.append(ChatItemWithTools(
                 id=message.id,
@@ -683,14 +705,25 @@ async def process_messages(
             # 获取当前时间
             current_time = datetime.now()  
 
-            # 解析 tool_result
-            tool_result_str = content.get('content', '')
-            try:
-                tool_result_dict = ast.literal_eval(tool_result_str)
-                print(tool_result_dict)
-            except (SyntaxError, ValueError) as e:
-                print(f"解析 tool_result 失败: {e}")
-                tool_result_dict = {}  # 如果解析失败，设置为空字典     
+            # # 解析 tool_result
+            # tool_result_str = content.get('content', '')
+            # try:
+            #     tool_result_dict = ast.literal_eval(tool_result_str)
+            #     print(tool_result_dict)
+            # except (SyntaxError, ValueError) as e:
+            #     print(f"解析 tool_result 失败: {e}")
+            #     tool_result_dict = {}  # 如果解析失败，设置为空字典    
+            print("ID:", new_id)
+            print("Message ID:", msg_id)  # 关联到 message 表的 ID
+            print("Conversation ID:", conversation_id)
+            print("Tool ID:", tool_call_id)
+            print("Tool Name:", tool_info["name"])
+            print("Tool Args:", json.dumps(tool_info["args"]))  # 将 args 转为 JSON 字符串
+            print("Tool Result:", content.get('content', "")) 
+             # 当前工具返回的是一个json，text/link
+            print(".....................")
+            print("Tool Result:", json.dumps(content.get('content', "")))
+            print("Create Time:", current_time) 
             tool_models.append(
                 ToolModel(
                     id=new_id,
@@ -698,9 +731,9 @@ async def process_messages(
                     conversation_id=conversation_id,
                     tool_id=tool_call_id,
                     tool_name=tool_info["name"],
-                    tool_args=tool_info["args"],  # 将 args 转为 JSON 字符串
+                    tool_args=json.dumps(tool_info["args"]),  # 将 args 转为 JSON 字符串
                     #tool_result=content.get('content', ''), #当前工具返回的是一个json，text/link
-                    tool_result=tool_result_dict, #当前工具返回的是一个json，text/link
+                    tool_result=content.get('content', ""), #当前工具返回的是一个json，text/link
                     create_time=current_time,
                 )
             )
