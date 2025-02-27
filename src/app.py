@@ -15,6 +15,7 @@ from src.api.api import *
 from src.model.openai_engine import proxy_stream_generator
 from src.utils.jwt_util import create_system_token
 from src.file.upload_router import router as upload_router
+from src.file.download_router import router as download_router
 from src.db.uploadfiles_model import UploadedFile
 from src.file.upload_router import minio_client
 from src.api.protocols import UserInput
@@ -246,6 +247,7 @@ async def stop(request: Request):
     return {"status": "200"}
 
 app.include_router(upload_router, prefix="/backend")
+app.include_router(download_router, prefix="/backend")
 
 app.post("/query_user_info",tags=["用户数据"],summary="查询用户信息")(query_user_info)
 
