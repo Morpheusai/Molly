@@ -15,7 +15,7 @@ class UploadedFile(Base):
     file_name = Column(String(255), comment='文件名')
     file_type = Column(String(255), comment='文件类型') 
     file_size = Column(Integer, comment='文件大小')
-    # file_content = Column(CustomLargeBinary, comment='文件内容（存储二进制内容）')
+    file_desc = Column(String, nullable=True, comment='文件内容概述')
     file_path = Column(String(255), comment='文件路径（MinIO路径）')
 
     file_hash = Column(String(64), comment='文件内容哈希值，用于比较文件内容是否相同')  # 通常SHA256是64个字符

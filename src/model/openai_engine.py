@@ -12,8 +12,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
     代理生成器，转发远程服务器的 SSE 流，并在流结束后进行数据库操作。
     """
     # 目标服务器地址
-    target_url= g_config["url"]["target_url"]
-    target_url = target_url
+    target_url= g_config["url"]["target_stream_url"]
     
     # 构造请求参数
     json_data = user_input.dict()
