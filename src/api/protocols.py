@@ -169,3 +169,11 @@ class UserInput(BaseModel):
 class DownloadFileRequest(BaseModel):
     file_path: str
     system_token: str
+
+#文件描述请求
+class DescRequest(BaseModel):
+    file_name: str
+    file_content: str
+
+class DescResponse(BaseModel):
+    file_description: str

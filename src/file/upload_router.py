@@ -3,6 +3,7 @@ import uuid
 import io
 import hashlib
 import asyncio
+import httpx, base64,json
 from typing import List, Dict, Optional
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Body
@@ -18,6 +19,9 @@ from src.utils.base import AsyncSessionLocal
 from src.utils.log import logger
 from src.utils.mysql_db import upsert_conversation_sql
 from src.utils.jwt_util import decode_vaild
+from src.utils.minio import minio_client,bucket_molly
+from src.config import g_config
+from src.api.protocols import DescRequest,DescResponse
 
 load_dotenv()
 
@@ -26,25 +30,13 @@ SECRET_KEY = os.getenv("SECRET_KEY", "") # 用于签名和验证 JWT 的密钥
 ALGORITHM = os.getenv("ALGORITHM", "HS256") # 加密算法
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # JWT Token 过期时间
 
+target_desc_url= g_config["url"]["target_desc_url"]
+                             
 router = APIRouter(tags=["file-upload"])
 
-# MinIO configuration
-minio_server = os.getenv("MINIO_SERVER")
-minio_access_key = os.getenv("MINIO_ACCESS_KEY")
-minio_secret_key = os.getenv("MINIO_SECRET_KEY")
-minio_secure = os.getenv("MINIO_SECURE") == "True"
-bucket_name = os.getenv("MINIO_BUCKET_NAME","molly")
-# Initialize the MinIO client
-minio_client = Minio(
-    minio_server,
-    access_key=minio_access_key,
-    secret_key=minio_secret_key,
-    secure=minio_secure,
-)
-
 # Ensure MinIO bucket exists
-if not minio_client.bucket_exists(bucket_name):
-    minio_client.make_bucket(bucket_name)
+if not minio_client.bucket_exists(bucket_molly):
+    minio_client.make_bucket(bucket_molly)
 
 @router.post("/upload")
 async def upload_attachments(
@@ -100,7 +92,7 @@ async def upload_attachments(
         else:
             response["attachments_info"].append(info)
     if has_errors:
-        response["result"] = 1,
+        response["ok"] = 1
         response["message"] = "Some attachments failed to process"
     return response
 async def calculate_file_hash(file_data: bytes) -> str:
@@ -138,7 +130,8 @@ async def insert_file_info_to_db(session: AsyncSession, conversation_id: str, fi
             file_path=file_info['file_path'],#minio文件路径
             file_hash=file_info['file_hash'],#文件内容哈希值
             file_status=file_info['file_status'],#文件状态
-            file_origin=file_info['file_origin']#用户上传
+            file_origin=file_info['file_origin'],#用户上传
+            file_desc=file_info['file_desc']#文件内容概述
         )
         session.add(uploaded_file)
         await session.commit()
@@ -200,7 +193,7 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
         HTTPException: If file processing or MinIO upload fails.
     """
     file_id = str(uuid.uuid4())
-    file_path = f"minio://{bucket_name}/{file_id}_{file.filename}"
+    file_path = f"minio://{bucket_molly}/{file_id}_{file.filename}"
     object_name = f"{file_id}_{file.filename}"
     try:
         # Read file content and calculate hash
@@ -217,7 +210,8 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
                 "file_path": existing_file.file_path,
                 "file_hash": existing_file.file_hash,
                 "file_status": existing_file.file_status,
-                "file_origin": existing_file.file_origin
+                "file_origin": existing_file.file_origin,
+                "file_desc": existing_file.file_desc
             }
         # Prepare file metadata
         file_info = {
@@ -228,17 +222,23 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
             "file_path": file_path,
             "file_hash": file_hash,
             "file_status": False,  # 默认失败，成功时改为 True
-            "file_origin": 0
+            "file_origin": 0,
+            "file_desc": "",
         }
         # Upload to MinIO asynchronously
         await upload_to_minio(
-            bucket_name,
+            bucket_molly,
             object_name,
             io.BytesIO(file_data),
             len(file_data),
         )
         file_info["file_status"] = True  # 上传成功
         logger.info(f"Uploaded file {file.filename} to MinIO successfully")
+
+        # 请求DescAgent获取file_desc
+        file_desc = await request_descagent(file.filename, file_data, file.content_type)
+        logger.info(f'DescAgent return file_desc:{file_desc}')
+        file_info["file_desc"] = file_desc
 
     except S3Error as minio_error:
         # MinIO 上传失败，记录日志并插入失败状态
@@ -252,3 +252,63 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
     # 上传成功，插入数据库
     await insert_file_info_to_db(session, conversation_id, file_info)
     return file_info
+
+async def request_descagent(file_name: str, file_data: bytes, content_type: str) -> str:
+    """Request a file description from the DescAgent server, optimized for handling .fas files.
+
+    Args:
+        file_name (str): The name of the file, used to identify it in the request and check its extension.
+        file_data (bytes): The raw content of the file in bytes, to be processed and sent to the DescAgent.
+        content_type (str): The MIME type of the file, used to determine if it’s likely a text file.
+
+    Returns:
+        str: The file description returned by the DescAgent server, or an error message if the request fails.
+
+    Raises:
+        None explicitly, but logs errors and returns error strings for connection or unexpected issues.
+    """
+    # 定义可能的文本类型，包括 .fas 文件
+    text_types = {"text/plain", "application/json", "text/csv", "application/x-fasta"}
+    
+    # 检查文件扩展名和类型
+    is_text_candidate = (
+        content_type in text_types or 
+        file_name.lower().endswith(".fas")
+    )
+    
+    if is_text_candidate:
+        try:
+            # 尝试将文件内容解码为字符串
+            file_content = file_data.decode("utf-8")
+            logger.debug(f"File {file_name} decoded as text: {file_content[:50]}...")
+        except UnicodeDecodeError:
+            logger.warning(f"File {file_name} is not valid UTF-8 text, using Base64")
+            file_content = base64.b64encode(file_data).decode("utf-8")
+    else:
+        # 非文本文件直接用Base64
+        file_content = base64.b64encode(file_data).decode("utf-8")
+    
+    # 构造请求数据
+    request_data = DescRequest(file_name=file_name, file_content=file_content).dict()
+    logger.info(f"发送到DescAgent的数据: {json.dumps(request_data, ensure_ascii=False)}")
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=30.0)) as client:
+        try:
+            response = await client.post(
+                target_desc_url,
+                json=request_data
+            )
+            if response.status_code != 200:
+                error = response.text
+                logger.error(f"DescAgent error: {response.status_code} {error}")
+                return f"DescAgent error: {response.status_code} {error}"
+            
+            result = DescResponse(**response.json())
+            return result.file_description
+
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error to DescAgent: {str(e)}")
+            return "Connection failed to DescAgent"
+        except Exception as e:
+            logger.error(f"Unexpected error requesting DescAgent: {str(e)}", exc_info=True)
+            return f"Unexpected error: {str(e)}"
