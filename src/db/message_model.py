@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey, func, CHAR,Text
 from sqlalchemy.orm import relationship
 from src.utils.base import Base
-from src.db.tool_model import ToolModel
+from src.db.tool_msg_model import ToolModel
 
 
 class MessageModel(Base):

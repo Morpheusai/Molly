@@ -7,7 +7,7 @@ from src.api.protocols import *
 from src.db.conversation_model import ConversationModel
 from src.db.message_model import MessageModel
 from src.db.uploadfiles_model import UploadedFile
-from src.db.tool_model import ToolModel
+from src.db.tool_msg_model import ToolModel
 from src.utils.session import with_async_session
 from passlib.hash import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession

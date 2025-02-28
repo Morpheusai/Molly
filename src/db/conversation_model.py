@@ -3,7 +3,7 @@ from sqlalchemy import Column, String, CHAR, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 from src.utils.base import Base
 from src.db.message_model import MessageModel
-from src.db.tool_model import ToolModel
+from src.db.tool_msg_model import ToolModel
 
 
 
