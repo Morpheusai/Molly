@@ -35,22 +35,42 @@ async def display_router(
         logger.error(f"Token validation failed: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
     
-    bucket_netmhcpan_results = "netmhcpan-results"
+    # bucket_netmhcpan_results = "netmhcpan-results"
 
     # 2. 解析 file_path
     file_path = request.file_path
-    if not file_path.startswith(f"minio://{bucket_netmhcpan_results}/"):
+    if not file_path.startswith(f"minio://"):
         logger.error(f"Invalid file_path format: {file_path}")
         raise HTTPException(status_code=400, detail=f"Invalid file path, expected minio://{bucket_netmhcpan_results}/...")
 
-    object_name = file_path.replace(f"minio://{bucket_netmhcpan_results}/", "")
-    file_name = object_name.split("/")[-1]
+    # 2. 提取 bucket_name 和 object_name
+    try:
+        # 去掉 minio:// 前缀
+        path_without_prefix = file_path[len("minio://"):]
+        
+        # 找到第一个斜杠的位置，用于分割 bucket_name 和 object_name
+        first_slash_index = path_without_prefix.find("/")
+        
+        if first_slash_index == -1:
+            raise ValueError("Invalid file path format: missing bucket name or object name")
+        
+        # 提取 bucket_name 和 object_name
+        bucket_name = path_without_prefix[:first_slash_index]
+        object_name = path_without_prefix[first_slash_index + 1:]
+        
+        # 打印提取结果（可选）
+        logger.info(f"Extracted bucket_name: {bucket_name}, object_name: {object_name}")
+        
+    except Exception as e:
+        logger.error(f"Failed to parse file_path: {file_path}, error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse file path: {str(e)}")    
+
 
     # 3. 从 MinIO 一次性读取文件内容
     try:
-        response = minio_client.get_object(bucket_netmhcpan_results, object_name)
-        file_stat = minio_client.stat_object(bucket_netmhcpan_results, object_name)
-        file_size = file_stat.size
+        response = minio_client.get_object(bucket_name, object_name)
+        # file_stat = minio_client.stat_object(bucket_name, object_name)
+        # file_size = file_stat.size
 
         # 一次性读取文件内容
         file_content = response.read()
@@ -63,23 +83,22 @@ async def display_router(
         except UnicodeDecodeError:
             logger.error(f"Failed to decode file content: {file_path}")
             raise HTTPException(status_code=500, detail="Failed to decode file content")
-
-        # 5. 查找目标行并截取内容
-        target_line = "# Rank Threshold for Weak binding peptides   2.000"
-        target_index = text_content.find(target_line)
-        if target_index == -1:
-            logger.error(f"Target line not found in file: {file_path}")
-            raise HTTPException(status_code=404, detail="Target line not found in file")
-
-        # 截取目标行之后的内容
-        content_target = text_content[target_index + len(target_line):]
-
+        if bucket_name == "netmhcpan-results":
+            # 如果 bucket_name 是 netmhcpan-results，直接返回整个文件内容
+            content_target = text_content
+        elif bucket_name == "esm3-results":
+            # 如果 bucket_name 是 esm_result，直接返回整个文件内容
+            content_target = text_content
+        else:
+            # 如果 bucket_name 不是上述两种情况，可以抛出异常或设置默认值
+            raise HTTPException(status_code=400, detail=f"Unsupported bucket name: {bucket_name}")
         # 6. 直接返回内容
         return DisplayResponse(
             ok=0,
             failed="",
             content_target=content_target
         )
+
 
     except S3Error as minio_error:
         logger.error(f"MinIO download failed for {object_name}: {str(minio_error)}")
