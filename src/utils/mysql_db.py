@@ -258,6 +258,16 @@ async def search_specific_session_sql(
         )
 
     try:
+        # 查询Conversation以获取session_title并验证会话存在性和权限
+        conversation_query = select(ConversationModel).where(ConversationModel.id == request.session_id)
+        conversation_result = await session.execute(conversation_query)
+        conversation = conversation_result.scalars().first()
+
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found",
+            )
         # 查询会话历史消息
         message_query = (
             select(MessageModel)
@@ -283,6 +293,7 @@ async def search_specific_session_sql(
                 ok=1,
                 failed="No data found",
                 session_id=request.session_id,
+                session_title=None,
                 chats=[],
                 files=[]
             )
@@ -322,7 +333,8 @@ async def search_specific_session_sql(
         files = [
             FileItem(
                 file_name=file.file_name,
-                file_path=file.file_path
+                file_path=file.file_path,
+                file_desc=file.file_desc
             )
             for file in file_data
         ]
@@ -331,6 +343,7 @@ async def search_specific_session_sql(
             ok=0,
             failed="",
             session_id=request.session_id,
+            session_title=conversation.session_title,
             chats=chats,
             files=files  # 添加文件信息
         )
@@ -341,6 +354,7 @@ async def search_specific_session_sql(
             ok=1,
             failed=str(e),
             session_id=request.session_id,
+            session_title=None,
             chats=[],
             files=[]
         )

@@ -101,11 +101,14 @@ class ChatItemWithTools(BaseModel):
 class FileItem(BaseModel):
     file_name: str
     file_path: str
+    file_desc: str
 
 class QuerySessionResponse(BaseModel):
     ok: int
     failed: str
     session_id: str
+    # session_title: Optional[str] = None
+    session_title: str
     chats: Optional[List[ChatItemWithTools]] = None  # 可以是 None 或 List[ChatItemWithTools]
     files: Optional[List[FileItem]] = None  # 可以是 None 或 List[FileItem]
 
