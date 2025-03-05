@@ -8,6 +8,7 @@ from src.db.conversation_model import ConversationModel
 from src.db.message_model import MessageModel
 from src.db.uploadfiles_model import UploadedFile
 from src.db.tool_msg_model import ToolModel
+from src.db.tool_files_model import ToolFileModel
 from src.utils.session import with_async_session
 from passlib.hash import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -710,7 +711,36 @@ async def process_messages(
 
     # 批量插入 Tool 数据
     tool_models = []
+    #批量插入Tool_files数据
+    tool_files = []
     for tool_msg in tool_messages:
+        print(tool_msg['content']['content']) 
+        # 解析 content 字段中的 JSON 字符串
+        content_dict = json.loads(tool_msg['content']['content'])
+        if 'url' in content_dict:
+            # 原始字符串
+            url = content_dict['url']
+            tool_llm_content = content_dict['content']
+            # 提取 minio:// 和 / 之间的值
+            prefix = "minio://"
+            start_index = len(prefix)  # 跳过 minio://
+            end_index = url.find("/", start_index)  # 找到第一个 / 的位置
+            # 提取目标值
+            target_value = url[start_index:end_index]
+
+            # 判断是否等于 netmhcpan-results
+            if target_value == "netmhcpan-results":
+                tool_files.append(
+                    ToolFileModel(
+                        id = str(uuid.uuid4()),
+                        tool_id = "acfe6b85-f651-11ef-a368-00163e1ab54a",
+                        file_url = url,
+                        tool_llm_content = tool_llm_content
+                    )
+                )
+            else:
+                pass
+
         content = tool_msg.get("content", {})
         tool_call_id = content.get("tool_call_id")
         if tool_call_id in tool_calls_map:
@@ -727,17 +757,17 @@ async def process_messages(
             # except (SyntaxError, ValueError) as e:
             #     print(f"解析 tool_result 失败: {e}")
             #     tool_result_dict = {}  # 如果解析失败，设置为空字典    
-            print("ID:", new_id)
-            print("Message ID:", msg_id)  # 关联到 message 表的 ID
-            print("Conversation ID:", conversation_id)
-            print("Tool ID:", tool_call_id)
-            print("Tool Name:", tool_info["name"])
-            print("Tool Args:", json.dumps(tool_info["args"]))  # 将 args 转为 JSON 字符串
-            print("Tool Result:", content.get('content', "")) 
-             # 当前工具返回的是一个json，text/link
-            print(".....................")
-            print("Tool Result:", json.dumps(content.get('content', "")))
-            print("Create Time:", current_time) 
+            # print("ID:", new_id)
+            # print("Message ID:", msg_id)  # 关联到 message 表的 ID
+            # print("Conversation ID:", conversation_id)
+            # print("Tool ID:", tool_call_id)
+            # print("Tool Name:", tool_info["name"])
+            # print("Tool Args:", json.dumps(tool_info["args"]))  # 将 args 转为 JSON 字符串
+            # print("Tool Result:", content.get('content', "")) 
+            #  # 当前工具返回的是一个json，text/link
+            # print(".....................")
+            # print("Tool Result:", json.dumps(content.get('content', "")))
+            # print("Create Time:", current_time) 
             tool_models.append(
                 ToolModel(
                     id=new_id,
@@ -747,13 +777,10 @@ async def process_messages(
                     tool_name=tool_info["name"],
                     tool_args=json.dumps(tool_info["args"]),  # 将 args 转为 JSON 字符串
                     #tool_result=content.get('content', ''), #当前工具返回的是一个json，text/link
-                    tool_result=content.get('content', ""), #当前工具返回的是一个json，text/link
+                    tool_result=content.get('content', ""), 
                     create_time=current_time,
                 )
             )
-                
-
-            
         
     # 批量插入工具数据
     if tool_models:
@@ -765,4 +792,16 @@ async def process_messages(
             return BaseResponse(
                 ok=1,
                 failed=str(e)
-            )    
+            )   
+        
+    # 批量插入Tool_files数据    
+    if tool_files:
+        try:
+            session.add_all(tool_files)
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            return BaseResponse(
+                ok=1,
+                failed=str(e)
+            ) 

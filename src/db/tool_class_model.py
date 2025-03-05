@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, DateTime, func, CHAR
 from sqlalchemy.orm import relationship
 from src.utils.base import Base
-from src.db.tool_file_model import ToolFileModel
+from src.db.tool_files_model import ToolFileModel
 
 class ToolClassModel(Base):
     """工具基本信息表"""
@@ -13,8 +13,8 @@ class ToolClassModel(Base):
     create_time = Column(DateTime, server_default=func.now(), comment='创建时间')
     update_time = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment='更新时间')
 
-    # 关联工具文件表（一对多关系）
-    files = relationship('ToolFileModel', back_populates='tool')
+    # 使用字符串形式的类名
+    files = relationship('ToolFileModel', back_populates='tool_kind')
 
     def __repr__(self):
         return f"<Tool(id={self.id}, name={self.tool_name})>"

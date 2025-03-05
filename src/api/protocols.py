@@ -8,7 +8,7 @@ from typing_extensions import TypedDict
 from src.model.models import AllModelEnum, OpenAIModelName
 
 #基础响应模型
-class BaseResponse(BaseModel):
+class  BaseResponse(BaseModel):
     ok: int = 0              # 0 表示成功，非 0 表示失败
     failed: str = ""         # 出错信息，默认为空
 
@@ -180,3 +180,8 @@ class DescRequest(BaseModel):
 
 class DescResponse(BaseModel):
     file_description: str
+
+
+#新建会话记录响应模型
+class DisplayResponse(BaseResponse):
+    content_target: str

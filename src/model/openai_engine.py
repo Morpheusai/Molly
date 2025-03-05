@@ -13,9 +13,10 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
     """
     # 目标服务器地址
     target_url= g_config["url"]["target_stream_url"]
-    
+
     # 构造请求参数
     json_data = user_input.dict()
+
     logger.info(f"发送到目标服务器的数据: {json.dumps(json_data, ensure_ascii=False)}")
 
     # 用于存储收集到的 AI 和 Tool 消息
@@ -50,10 +51,11 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
 
                     # 解析 chunk 并判断是否为 AI 或 Tool 类型
                     if chunk.startswith("data:"):
+                        print(chunk)
                         try:
                             data = json.loads(chunk[5:].strip())
+                            print(data)
                             if data.get("type") == "message":
-                                
                                 content = data.get("content", {})
                                 msg_type = content.get("type")
                                 if msg_type == "ai":
@@ -63,9 +65,11 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                             else:        
                                 content = data.get("content", {})
                                 full_response += content
-                                
-                        except json.JSONDecodeError:
-                            pass
+                        except json.JSONDecodeError as e:
+                            # 记录错误信息和出错的内容
+                            print("JSONDecodeError encountered:")
+                            print(f"Error Message: {e}")
+                            print(f"Failed to parse chunk: {chunk[5:].strip()}")
         except httpx.ConnectError as e:
             logger.error(f"Connection error: {str(e)}")
             yield f"data: {json.dumps({'type': 'error', 'content': 'Connection failed'})}\n\n"
@@ -75,7 +79,8 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
         finally:
             # 清理 stop_events 字典
             if conversation_id in stop_events:
-                del stop_events[conversation_id]            
+                del stop_events[conversation_id]  
+       
     # 处理消息
     await process_messages(msg_id, conversation_id, ai_messages, tool_messages, full_response)            
 
