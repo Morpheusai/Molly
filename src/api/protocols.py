@@ -156,6 +156,8 @@ class UpdateSessionRequest(BaseModel):
 class FileInfo(BaseModel):
     file_name: str = Field(description="文件名")
     file_content: str = Field(description="文件内容")
+    file_path: str = Field(description="文件路径")
+    file_desc: str = Field(description="文件概述")
 
 class FileGroup(BaseModel):
     conversation_id: Optional[str] = Field(description="会话 ID，UUID 格式，长度 36", max_length=36, min_length=36)
