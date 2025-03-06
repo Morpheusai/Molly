@@ -86,7 +86,7 @@ async def display_router(
         if bucket_name == "netmhcpan-results":
             # 如果 bucket_name 是 netmhcpan-results，直接返回整个文件内容
             content_target = text_content
-        elif bucket_name == "esm3-results":
+        elif bucket_name == "esm-results":
             # 如果 bucket_name 是 esm_result，直接返回整个文件内容
             content_target = text_content
         else:
