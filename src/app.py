@@ -262,13 +262,13 @@ async def backend_chat_with_files(
         files = []
         for uploaded_file in uploaded_files:
             file_name, file_content = get_file_content(uploaded_file.file_path)
-            if file_content:  # 检查内容是否非空
-                logger.info(f"File: {file_name}, Content length: {len(file_content)}")
-                files.append(FileInfo(file_name=file_name, file_content=file_content))
-            else:
-                logger.warning(f"Skipped file {file_name} due to empty content")
             logger.info(f"File: {file_name}, Content length: {len(file_content)}")
-            files.append(FileInfo(file_name=file_name, file_content=file_content))
+            files.append(FileInfo(
+                file_name=file_name, 
+                file_content=file_content,
+                file_path=uploaded_file.file_path,
+                file_desc=uploaded_file.file_desc
+                ))
         if files:
             file_groups.append(FileGroup(conversation_id=conversation_id, files=files))
             logger.info(f"Files: {files}, file_groups: {file_groups}")
