@@ -741,6 +741,18 @@ async def process_messages(
             else:
                 pass
 
+            if target_value == "esm-results":
+                tool_files.append(
+                    ToolFileModel(
+                        id = str(uuid.uuid4()),
+                        tool_id = "bcfe6b85-f651-11ef-a368-00174e1ab54a",
+                        file_url = url,
+                        tool_llm_content = tool_llm_content
+                    )
+                )
+            else:
+                pass
+
         content = tool_msg.get("content", {})
         tool_call_id = content.get("tool_call_id")
         if tool_call_id in tool_calls_map:
