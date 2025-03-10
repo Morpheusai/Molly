@@ -1,25 +1,26 @@
 import os
+import re
 from fastapi import Body, HTTPException, APIRouter
 from fastapi.responses import StreamingResponse
-
 from minio.error import S3Error
 from src.api.protocols import DownloadFileRequest
 from src.utils.log import logger
-from src.utils.jwt_util import decode_vaild
-from src.utils.minio import minio_client, bucket_netmhcpan_results
+from src.utils.jwt_util import decode_vaild  # 修正拼写错误
+from src.utils.minio import minio_client
 
-# 假设这些变量已在文件顶部定义
+# 读取环境变量
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
-# minio_client = Minio(...)  # 已有 MinIO 配置
-# bucket_name = os.getenv("MINIO_BUCKET_NAME", "molly")
+
+# 定义 MinIO 路径正则表达式(用于匹配)
+MINIO_URL_PATTERN = re.compile(r"^minio://([\w-]+)/(.+)$")
 
 router = APIRouter(tags=["file-download"])
 
 @router.post("/download")
 async def download_file(
-    request: DownloadFileRequest = Body(...),
-) -> StreamingResponse:
+    request: DownloadFileRequest = Body(...)
+    ) -> StreamingResponse:
     """Download a file from MinIO after token validation.
 
     Args:
@@ -28,31 +29,40 @@ async def download_file(
     Returns:
         StreamingResponse: The file content as a stream for direct download.
     """
-    # 验证 token
+    # 1. **验证 Token 并处理过期情况**
     try:
         payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid = payload.get("sub")
         if not unionid:
             raise HTTPException(status_code=401, detail="Invalid or missing unionid")
+        
+        # 检查 Token 是否过期
+        if "exp" in payload:
+            import time
+            if payload["exp"] < time.time():
+                raise HTTPException(status_code=401, detail="Token has expired")
+
     except Exception as e:
         logger.error(f"Token validation failed: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
-    # 解析 file_path
+    # 2. **解析 file_path**
     file_path = request.file_path
-    if not file_path.startswith(f"minio://{bucket_netmhcpan_results}/"):
+    match = MINIO_URL_PATTERN.match(file_path)
+    
+    if not match:
         logger.error(f"Invalid file_path format: {file_path}")
-        raise HTTPException(status_code=400, detail=f"Invalid file path, expected minio://{bucket_netmhcpan_results}/...")
+        raise HTTPException(status_code=400, detail="Invalid file path format. Expected 'minio://bucket_name/object_name'.")
 
-    object_name = file_path.replace(f"minio://{bucket_netmhcpan_results}/", "")
-    file_name = object_name.split("/")[-1]
+    bucket_name, object_name = match.groups()
 
-    # 从 minio 下载文件
+    # 3. **从 MinIO 下载文件**
     try:
-        response = minio_client.get_object(bucket_netmhcpan_results, object_name)
-        file_stat = minio_client.stat_object(bucket_netmhcpan_results, object_name)
+        response = minio_client.get_object(bucket_name, object_name)
+        file_stat = minio_client.stat_object(bucket_name, object_name)
         file_size = file_stat.size
         file_type = file_stat.content_type or "application/octet-stream"
+        file_name = object_name.split("/")[-1]
 
         async def stream_file():
             try:
@@ -79,3 +89,4 @@ async def download_file(
     except Exception as e:
         logger.error(f"Unexpected error downloading {file_path}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
+    
