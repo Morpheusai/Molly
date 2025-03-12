@@ -112,7 +112,11 @@ async def wechat_callback(code: str)-> Dict[str, Any]:
 
         # 3. 入库存储用户
         await add_user(request=add_user_request)
-
+        try:
+            await insert_demo_conversation(user_info.get("unionid"))
+        except Exception as e:
+            logger.error(f"插入示例对话失败: {e}", exc_info=True)
+            return {"error": "插入示例对话失败"}
     # 生成自身系统的 JWT Token,并存入user_token表中
     system_token = await create_system_token(unionid=unionid,wechat_access_token=token_data['access_token'])
 
@@ -185,7 +189,11 @@ async def m_wechat_callback(code: str)-> Dict[str, Any]:
 
         # 3. 入库存储用户
         await add_user(request=add_user_request)
-
+        try:
+            await insert_demo_conversation(user_info.get("unionid"))
+        except Exception as e:
+            logger.error(f"插入示例对话失败: {e}", exc_info=True)
+            return {"error": "插入示例对话失败"}
     # 生成自身系统的 JWT Token,并存入user_token表中
     system_token = await create_system_token(unionid=unionid,wechat_access_token=token_data['access_token'])
 

@@ -16,6 +16,7 @@ from src.db.user_model import UserModel
 
 from datetime import datetime
 
+from src.demo.insert_example import insert_demo
 #用户注册
 async def add_user(
         request: AddUserRequest = None,
@@ -106,6 +107,12 @@ async def update_session_name(
         request: UpdateSessionRequest = Body(...)        
 ):
     return await update_session_name_sql(session,request)
+
+#插入demo示例
+async def insert_demo_conversation(
+        user_id: str
+):
+    return await insert_demo(user_id)
 
 
 

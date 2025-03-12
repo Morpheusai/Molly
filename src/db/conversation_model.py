@@ -20,7 +20,7 @@ class ConversationModel(Base):
     session_title = Column(String(255), comment='会话标题') 
     
     #聊天类型字段
-    chat_type = Column(String(50), comment="聊天类型")
+    chat_type = Column(String(50), default="normal", comment="聊天类型")
 
     # 时间字段
     updata_time=Column(DateTime, default=func.now(), comment='更新时间')#TODO 更新时间

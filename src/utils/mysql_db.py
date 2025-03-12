@@ -191,7 +191,8 @@ async def delete_sessions_sql(
             # 查询该用户的所有会话 ID
             result = await session.execute(
                 select(ConversationModel.id).where(
-                    ConversationModel.user_id == unionid
+                    ConversationModel.user_id == unionid,
+                    ConversationModel.chat_type != 'demo'
                 )
             )
             session_ids = result.scalars().all()
@@ -226,7 +227,8 @@ async def delete_sessions_sql(
             # 删除所有会话
             await session.execute(
                 delete(ConversationModel).where(
-                    ConversationModel.user_id == unionid
+                    ConversationModel.user_id == unionid,
+                    ConversationModel.chat_type != 'demo'
                 )
             )
 
@@ -404,7 +406,8 @@ async def search_sessions_sql(
                 session_id=record.id,
                 session_title=record.session_title,
                 updata_time=formatted_update_time,
-                create_time=formatted_create_time
+                create_time=formatted_create_time,
+                chat_type=record.chat_type
             ))
 
         return QuerySessionsResponse(
@@ -593,7 +596,7 @@ async def upsert_conversation_sql(session,conversation_id: str, unionid: str, pr
                 id=conversation_id,
                 user_id=unionid,
                 session_title=prompt,  # 设置会话标题
-                chat_type=None,  # 设置聊天类型为 None
+                chat_type="normal",  # 设置聊天类型为 normal
                 updata_time=datetime.now(),  # 设置更新时间
                 create_time=datetime.now(),  # 设置创建时间
             )

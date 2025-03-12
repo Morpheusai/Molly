@@ -66,12 +66,13 @@ class QuerySingleSessionRequest(BaseModel):
     session_id: str  # 会话 ID    
 
 #单条会话信息
-#TODO 创建时间、更新时间
 class SessionItem(BaseModel):
     session_id: str  # 会话 ID
     session_title: str  # 会话标题
     updata_time: str   # 更新时间
-    create_time: str  # 创建时间    
+    create_time: str  # 创建时间 
+    chat_type : str #会话类型
+    
 
     
 #查询会话历史响应模型
@@ -137,7 +138,7 @@ class InsertAIInputSessionRequest(BaseModel):
 class AddSessionRequest(BaseModel):
     system_token:str
     session_title: Optional[str] = "新会话"    # 会话标题  
-    chat_type: Optional[str] = None   # 聊天类型
+    chat_type: str = "normal"
 
 #聊天消息请求模型
 class ChatRequest(BaseModel):
