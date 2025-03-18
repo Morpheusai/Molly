@@ -589,13 +589,15 @@ async def get_new_session_id_sql(
 # 使用 UPSERT 操作更新或插入 conversation 记录
 async def upsert_conversation_sql(session,conversation_id: str, unionid: str, prompt:str):
     try:
+        # 确保 prompt 是字符串，并截取前 30 个字符
+        truncated_prompt = str(prompt)[:30] if prompt is not None else ""
     # 构建 UPSERT 语句
         stmt = (
             insert(ConversationModel)
             .values(
                 id=conversation_id,
                 user_id=unionid,
-                session_title=prompt,  # 设置会话标题
+                session_title=truncated_prompt,  # 设置会话标题
                 chat_type="normal",  # 设置聊天类型为 normal
                 updata_time=datetime.now(),  # 设置更新时间
                 create_time=datetime.now(),  # 设置创建时间
