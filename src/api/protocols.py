@@ -188,3 +188,10 @@ class DescResponse(BaseModel):
 #新建会话记录响应模型
 class DisplayResponse(BaseResponse):
     content_target: str
+
+class WebLogoRequest(BaseModel):
+    peptide_sequences: list 
+    logo_type: str = "svg"  
+    color_scheme: str = "auto"  
+    logo_title: str = "Sequence Motif Analysis"
+    system_token: str 

@@ -20,6 +20,7 @@ from src.file.display_router import router as display_router
 from src.db.uploadfiles_model import UploadedFile
 from src.file.upload_router import minio_client
 from src.api.protocols import UserInput
+from src.utils.weblogo_generate import router as weblogo_generate
 from pydantic import ValidationError
 
 logger.info(f"========================start molly backend==============================")
@@ -342,6 +343,7 @@ async def stop(request: Request):
 app.include_router(upload_router, prefix="/backend")
 app.include_router(download_router, prefix="/backend")
 app.include_router(display_router, prefix="/backend")
+app.include_router(weblogo_generate, prefix="/backend")
 
 app.post("/query_user_info",tags=["用户数据"],summary="查询用户信息")(query_user_info)
 
