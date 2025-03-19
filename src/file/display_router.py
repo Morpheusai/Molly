@@ -1,6 +1,9 @@
 import os
+
 from fastapi import APIRouter, Body, HTTPException
 from minio.error import S3Error
+from openpyxl import load_workbook
+from io import BytesIO
 
 from src.api.protocols import DownloadFileRequest
 from src.utils.log import logger
@@ -78,16 +81,25 @@ async def display_router(
         response.release_conn()
 
         # 4. 解码文件内容
-        try:
-            text_content = file_content.decode("utf-8")
-        except UnicodeDecodeError:
-            logger.error(f"Failed to decode file content: {file_path}")
-            raise HTTPException(status_code=500, detail="Failed to decode file content")
+
         if bucket_name == "netmhcpan-results":
             # 如果 bucket_name 是 netmhcpan-results，直接返回整个文件内容
-            content_target = text_content
+            workbook = load_workbook(BytesIO(file_content))
+            sheet = workbook.active  # 获取第一个工作表
+            
+            # 将工作表内容转换为列表
+            data = []
+            for row in sheet.iter_rows(values_only=True):
+                data.append(row)
+            content_target = "\n".join(["\t".join([str(item) if item is not None else "" for item in row]) for row in data])    
+            # content_target = data
         elif bucket_name == "esm-results":
-            # 如果 bucket_name 是 esm_result，直接返回整个文件内容
+            try:
+                text_content = file_content.decode("utf-8")
+            except UnicodeDecodeError:
+                logger.error(f"Failed to decode file content: {file_path}")
+                raise HTTPException(status_code=500, detail="Failed to decode file content")
+                # 如果 bucket_name 是 esm_result，直接返回整个文件内容
             content_target = text_content
         else:
             # 如果 bucket_name 不是上述两种情况，可以抛出异常或设置默认值
