@@ -79,8 +79,11 @@ async def download_file(
             stream_file(),
             media_type=file_type,
             headers={
-                "Content-Disposition": f"attachment; filename=\"{file_name}\"",
+                "Content-Disposition": f"attachment; filename*=UTF-8''{file_name}",
                 "Content-Length": str(file_size),
+                "Cache-Control": "no-store",
+                "Pragma": "no-cache",
+                "Access-Control-Expose-Headers": "Content-Disposition"
             }
         )
     except S3Error as minio_error:

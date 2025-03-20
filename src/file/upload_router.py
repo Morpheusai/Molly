@@ -6,9 +6,12 @@ import asyncio
 import httpx, base64,json
 from typing import List, Dict, Optional
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Body
+from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Body, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from minio import Minio
 from minio.error import S3Error
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from dotenv import load_dotenv
@@ -29,6 +32,9 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "") # 用于签名和验证 JWT 的密钥
 ALGORITHM = os.getenv("ALGORITHM", "HS256") # 加密算法
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # JWT Token 过期时间
+
+MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", 5))
+MAX_FILES_PER_CONVERSATION = int(os.getenv("MAX_FILES_PER_CONVERSATION", 5))
 
 target_desc_url= g_config["url"]["target_desc_url"]
                              
@@ -162,6 +168,12 @@ async def check_existing_file(session: AsyncSession, conversation_id: str, file_
     existing_file = result.scalars().first()
     return existing_file
 
+async def check_file_count(session: AsyncSession, conversation_id: str) -> int:
+    """查询当前会话的已上传文件数量"""
+    query = select(func.count()).select_from(UploadedFile).where(UploadedFile.conversation_id == conversation_id)
+    result = await session.execute(query)
+    return result.scalar()
+
 async def upload_to_minio(bucket: str, object_name: str, data: io.BytesIO, length: int) -> None:
     """Upload a file to MinIO asynchronously.
 
@@ -196,8 +208,22 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
     file_path = f"minio://{bucket_molly}/{file_id}_{file.filename}"
     object_name = f"{file_id}_{file.filename}"
     try:
-        # Read file content and calculate hash
+        file_count = await check_file_count(session, conversation_id)
+        if file_count >= MAX_FILES_PER_CONVERSATION:
+            raise HTTPException(
+                status_code=413, 
+                detail=f"File limit exceeded: Maximum {MAX_FILES_PER_CONVERSATION} files allowed per conversation"
+            )
+
         file_data = await file.read()
+        file_size_mb = len(file_data) / (1024 * 1024)
+        # 检查文件大小是否超过限制
+        if file_size_mb > MAX_FILE_SIZE_MB:
+            raise HTTPException(
+                status_code=413,  # 413 Payload Too Large
+                detail=f"File size exceeds limit of {MAX_FILE_SIZE_MB} MB"
+            )
+
         file_hash = await calculate_file_hash(file_data)
         
         # Check if a file with the same content already exists in the current session
@@ -245,6 +271,8 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
         logger.error(f"MinIO upload failed for file {file.filename}: {str(minio_error)}")
         await insert_file_info_to_db(session, conversation_id, file_info)
         raise HTTPException(status_code=500, detail=f"MinIO upload failed: {str(minio_error)}")
+    except HTTPException:
+        raise
     except Exception as e:
         # 其他异常（例如文件读取失败、哈希计算失败）
         logger.error(f"Unexpected error processing file {file.filename}: {str(e)}")
