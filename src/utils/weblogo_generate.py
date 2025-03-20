@@ -90,19 +90,21 @@ def generate_weblogo(peptide_sequences: list, logo_type: str = 'png', logo_title
         # 设置 Logo 生成选项
         options = LogoOptions()
         options.logo_title = logo_title
-        options.small_fontsize = 8
-        options.title_fontsize = 12
+        options.small_fontsize = 3    
+        options.title_fontsize = 8     
+        options.number_fontsize = 4  
+        options.fontsize = 8        
         options.color_scheme = weblogo.std_color_schemes.get(color_scheme, weblogo.std_color_schemes["auto"])
         options.unit_name = "bits"
         options.show_yaxis = True
         options.yaxis_label = "Information (bits)"
-        options.yaxis_scale = 2.0
+        options.yaxis_scale = 4.0
         options.show_xaxis = True
         options.xaxis_label = "Position"
         options.fineprint = "Created by Neo"
         options.show_fineprint = True
-        options.stack_width = 10.5
-        options.resolution = 300
+        options.stack_width = 15
+        options.resolution = 600
 
         # 生成 Logo 格式
         format = LogoFormat(data, options)
