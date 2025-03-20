@@ -170,6 +170,7 @@ class UserInput(BaseModel):
     system_token: str = Field(description="系统token")
     conversation_id: str = Field(description="会话id")
     file_list: List[FileGroup] = Field(description="传入文件列表", default=[])
+    conversation_chat_type: str = Field(description="会话聊天类型", default="normal")
 
 #文件下载请求
 class DownloadFileRequest(BaseModel):

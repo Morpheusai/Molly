@@ -315,8 +315,8 @@ async def search_specific_session_sql(
                 for tool in sorted(message.tools, key=lambda x: x.create_time)  # 双重排序保障
             ]
 
-            print("............111111")
-            print(tools)
+            
+            
             # print(f"Tools for message ID {message.id}:")
             # for tool in tools:
             #     print(f"  - Tool Name: {tool.tool_name}")
@@ -590,7 +590,7 @@ async def get_new_session_id_sql(
 async def upsert_conversation_sql(session,conversation_id: str, unionid: str, prompt:str):
     try:
         # 确保 prompt 是字符串，并截取前 30 个字符
-        truncated_prompt = str(prompt)[:30] if prompt is not None else ""
+        truncated_prompt = str(prompt)[:64] if prompt is not None else ""
     # 构建 UPSERT 语句
         stmt = (
             insert(ConversationModel)

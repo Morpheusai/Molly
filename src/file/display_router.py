@@ -101,6 +101,15 @@ async def display_router(
                 raise HTTPException(status_code=500, detail="Failed to decode file content")
                 # 如果 bucket_name 是 esm_result，直接返回整个文件内容
             content_target = text_content
+        elif bucket_name == "netmhcstabpan-results":
+            workbook = load_workbook(BytesIO(file_content))
+            sheet = workbook.active  # 获取第一个工作表
+            
+            # 将工作表内容转换为列表
+            data = []
+            for row in sheet.iter_rows(values_only=True):
+                data.append(row)
+            content_target = "\n".join(["\t".join([str(item) if item is not None else "" for item in row]) for row in data])   
         else:
             # 如果 bucket_name 不是上述两种情况，可以抛出异常或设置默认值
             raise HTTPException(status_code=400, detail=f"Unsupported bucket name: {bucket_name}")
