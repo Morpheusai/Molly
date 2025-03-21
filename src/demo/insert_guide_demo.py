@@ -30,20 +30,25 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         conversation = ConversationModel(
             id=new_conversation_id,
             user_id=user_id,
-            session_title="DEMO",
+            session_title="MHC-I分子结合亲和力预测示例",
             chat_type="demo",#config,
             create_time=datetime.strptime("2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
         )
         session.add(conversation)
 
-        response_text = """欢迎来到个性化疫苗 AI 预测助手！
-我们可以帮助您 从候选抗原序列中筛选出与 MHC-I 分子结合亲和力最强的肽段，并以三维结构展示出来以便更好地评估它们的免疫潜力。
-简单四步预测流程：
-\t第一步：提供您的候选抗原序列（或使用示例数据）。
-\t第二步：可以自定义选择适合的 HLA 分型，我们将计算不同肽段的结合能力。
-\t第三步：调整预测参数，探索不同的筛选策略。
-\t第四步：展示筛选出来的亲和力最强的肽段三维结构。
-请上传您的候选抗原 FASTA 文件，并回复继续！"""
+        response_text = \
+"""
+🌟 **欢迎来到个性化疫苗 AI 预测助手！** 🌟
+我们可以帮助您**从候选抗原序列中筛选出与MHC-I 分子结合亲和力最强的肽段**，以便更好地评估它们的免疫潜力。 
+💡 **简单操作流程**：
+✅ *1.*: 提供您候选的抗原序列文件，我们讲进行**默认筛选策略**的预测。
+✅ *2.*: 后续您可以尝试不同的筛选策略：
+ - 选择合适的HLA 分型，我们将计算不同肽段的结合能力。
+ - 调整预测参数，探索不同的筛选策略。
+ - 展示筛选出来的亲和力最强的肽段三维结构。
+
+📥 我们提供了一个示例抗原序列文件，您可以选择使用。
+"""
 
         messages = [
             MessageModel(
