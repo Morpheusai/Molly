@@ -347,6 +347,7 @@ async def search_specific_session_sql(
             failed="",
             session_id=request.session_id,
             session_title=conversation.session_title,
+            chat_type=conversation.chat_type,
             chats=chats,
             files=files  # 添加文件信息
         )
@@ -358,6 +359,7 @@ async def search_specific_session_sql(
             failed=str(e),
             session_id=request.session_id,
             session_title=None,
+            chat_type=conversation.chat_type,
             chats=[],
             files=[]
         )
