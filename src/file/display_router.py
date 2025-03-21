@@ -93,7 +93,7 @@ async def display_router(
                 data.append(row)
             content_target = "\n".join(["\t".join([str(item) if item is not None else "" for item in row]) for row in data])    
             # content_target = data
-        elif bucket_name == "esm-results":
+        elif bucket_name == "esm3-results":
             try:
                 text_content = file_content.decode("utf-8")
             except UnicodeDecodeError:
