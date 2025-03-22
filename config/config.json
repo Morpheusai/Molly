@@ -10,6 +10,7 @@
         "target_desc_url":"http://52.74.25.27:60718/description"
     },
     "temp":{
+        "upload_files_dir":"/mnt/tmp/upload",
         "weblogo_peptide_sequence_dir":"/mnt/tmp/weblogo/pep_seq",
         "weblogo_output_tmp_image_dir":"/mnt/tmp/weblogo/output_image"
     },
