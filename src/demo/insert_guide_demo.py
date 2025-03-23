@@ -30,7 +30,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         conversation = ConversationModel(
             id=new_conversation_id,
             user_id=user_id,
-            session_title="MHC-I分子结合亲和力预测示例",
+            session_title="MHC-I分子结合亲和力预测AI助手",
             chat_type="demo",#config,
             create_time=datetime.strptime("2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
         )
