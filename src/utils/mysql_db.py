@@ -674,7 +674,7 @@ async def process_messages(
     conversation_id: str,
     ai_messages: List[Dict],
     tool_messages: List[Dict],
-    full_response:list
+    full_response:str
 ):
 
     # 第一步：更新 message 表的 response 字段
@@ -696,8 +696,8 @@ async def process_messages(
         result = await session.execute(select(MessageModel).filter_by(id=msg_id))
         m=result.scalars().first()
         if m is not None:
-            json_str = json.dumps(full_response, ensure_ascii=False)
-            m.response = json_str
+            # json_str = json.dumps(full_response, ensure_ascii=False)
+            m.response = full_response
             session.add(m)
             await session.commit()
     except Exception as e:

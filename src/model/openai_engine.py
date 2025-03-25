@@ -16,7 +16,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
         target_url = g_config["url"]["target_stream_url"]
     else:
         target_url = g_config["url"]["target_demo_stream_url"]  
-
+    response_tag = g_config["special_token"]["response_tag"]
     # 构造请求参数
     json_data = user_input.dict()
 
