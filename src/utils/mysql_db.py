@@ -1,38 +1,41 @@
-from src.db.user_model import UserModel
-from sqlalchemy.ext.asyncio import AsyncSession
+# 标准库
+import ast
+import json
+import os
+import uuid
+from datetime import datetime, timedelta
+from typing import List
+
+# 第三方库
+from dotenv import load_dotenv
+from fastapi import (
+    Body, 
+    Depends, 
+    HTTPException, 
+    Response, 
+    status
+)
+from fastapi.responses import JSONResponse
+from jose import JWTError, jwt
+from passlib.hash import bcrypt
 from pydantic import BaseModel, Field
-from fastapi import HTTPException, Depends, Body, status
+from sqlalchemy import delete, desc
+from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload, sessionmaker
+
+# 本地模块
 from src.api.protocols import *
 from src.db.conversation_model import ConversationModel
 from src.db.message_model import MessageModel
-from src.db.uploadfiles_model import UploadedFile
-from src.db.tool_msg_model import ToolModel
 from src.db.tool_files_model import ToolFileModel
-from src.utils.session import with_async_session
-from passlib.hash import bcrypt
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import sessionmaker
-from pydantic import BaseModel
-from sqlalchemy import delete
-from sqlalchemy.dialects.mysql import insert  # 正确导入 MySQL 的 insert 模块
-import uuid
-from datetime import datetime
-from fastapi import Response
-from fastapi.responses import JSONResponse
-from typing import List
-from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
-from src.utils.session import get_async_db
-from sqlalchemy import desc
-from fastapi import HTTPException
-from jose import JWTError, jwt
+from src.db.tool_msg_model import ToolModel
+from src.db.uploadfiles_model import UploadedFile
+from src.db.user_model import UserModel
 from src.utils.jwt_util import decode_vaild
-import os
-import json
-import ast
-from dotenv import load_dotenv
-
+from src.utils.session import get_async_db, with_async_session
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "") # 用于签名和验证 JWT 的密钥
 ALGORITHM = os.getenv("ALGORITHM", "HS256") # 加密算法
@@ -353,7 +356,6 @@ async def search_specific_session_sql(
         )
 
     except Exception as e:
-        print(e)
         return QuerySessionResponse(
             ok=1,
             failed=str(e),
@@ -672,7 +674,7 @@ async def process_messages(
     conversation_id: str,
     ai_messages: List[Dict],
     tool_messages: List[Dict],
-    full_response:str
+    full_response:list
 ):
 
     # 第一步：更新 message 表的 response 字段
@@ -694,7 +696,9 @@ async def process_messages(
         result = await session.execute(select(MessageModel).filter_by(id=msg_id))
         m=result.scalars().first()
         if m is not None:
-            m.response = full_response
+            json_str = json.dumps(full_response, ensure_ascii=False)
+            m.response = json_str
+            print(json_str)
             session.add(m)
             await session.commit()
     except Exception as e:
@@ -720,8 +724,9 @@ async def process_messages(
     tool_models = []
     #批量插入Tool_files数据
     tool_files = []
+    # 初始化基准时间（循环开始前记录）
+    base_time = datetime.now()
     for tool_msg in tool_messages:
-        print(tool_msg['content']['content']) 
         # 解析 content 字段中的 JSON 字符串
         content_dict = json.loads(tool_msg['content']['content'])
         if 'url' in content_dict:
@@ -765,8 +770,8 @@ async def process_messages(
         if tool_call_id in tool_calls_map:
             tool_info = tool_calls_map[tool_call_id]
             new_id = str(uuid.uuid4())
-            # 获取当前时间
-            current_time = datetime.now()  
+            # 每次循环增加1秒
+            current_time = base_time + timedelta(seconds=len(tool_models))
 
             # # 解析 tool_result
             # tool_result_str = content.get('content', '')

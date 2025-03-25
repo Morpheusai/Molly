@@ -25,8 +25,12 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
     # 用于存储收集到的 AI 和 Tool 消息
     ai_messages: List[Dict] = []  # 存储所有 AI 类型消息
     tool_messages: List[Dict] = []  # 存储所有 Tool 类型消息
+    #用来将流式的消息进行分割
+    current_response = None
+    flag_i=0
+    flag_j=0
     # 初始化 full_response
-    full_response = ""
+    full_response = []
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=300.0)) as client:
         try:
@@ -54,25 +58,30 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
 
                     # 解析 chunk 并判断是否为 AI 或 Tool 类型
                     if chunk.startswith("data:"):
-                        print(chunk)
                         try:
                             data = json.loads(chunk[5:].strip())
-                            print(data)
                             if data.get("type") == "message":
                                 content = data.get("content", {})
                                 msg_type = content.get("type")
                                 if msg_type == "ai":
                                     ai_messages.append(data)
                                 elif msg_type == "tool":
+                                    flag_j+=1
                                     tool_messages.append(data)
-                            else:        
-                                content = data.get("content", {})
-                                full_response += content
+                            else:    
+                                if flag_i==flag_j:    
+                                    content = data.get("content", {})
+                                    current_response = (current_response or "") + content
+                                else:
+                                    flag_i+=1
+                                    if current_response is not None:
+                                        full_response.append(current_response)
+                                        current_response=None
+
                         except json.JSONDecodeError as e:
                             # 记录错误信息和出错的内容
-                            print("JSONDecodeError encountered:")
-                            print(f"Error Message: {e}")
-                            print(f"Failed to parse chunk: {chunk[5:].strip()}")
+                            logger.error(f"JSONDecodeError encountered: {e}")
+                            logger.error(f"Failed to parse chunk: {chunk[5:].strip()}")
         except httpx.ConnectError as e:
             logger.error(f"Connection error: {str(e)}")
             yield f"data: {json.dumps({'type': 'error', 'content': 'Connection failed'})}\n\n"
