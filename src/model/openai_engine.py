@@ -77,11 +77,12 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                                     if current_response is not None:
                                         full_response.append(current_response)
                                         current_response=None
-
                         except json.JSONDecodeError as e:
                             # 记录错误信息和出错的内容
                             logger.error(f"JSONDecodeError encountered: {e}")
                             logger.error(f"Failed to parse chunk: {chunk[5:].strip()}")
+                if current_response is not None:
+                    full_response.append(current_response)                            
         except httpx.ConnectError as e:
             logger.error(f"Connection error: {str(e)}")
             yield f"data: {json.dumps({'type': 'error', 'content': 'Connection failed'})}\n\n"

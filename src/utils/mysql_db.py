@@ -698,7 +698,6 @@ async def process_messages(
         if m is not None:
             json_str = json.dumps(full_response, ensure_ascii=False)
             m.response = json_str
-            print(json_str)
             session.add(m)
             await session.commit()
     except Exception as e:
