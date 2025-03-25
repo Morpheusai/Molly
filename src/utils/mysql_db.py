@@ -697,6 +697,7 @@ async def process_messages(
         m=result.scalars().first()
         if m is not None:
             # json_str = json.dumps(full_response, ensure_ascii=False)
+
             m.response = full_response
             session.add(m)
             await session.commit()

@@ -13,7 +13,6 @@ def load_local_config():
     if log_level:
         conf["log_level"] = log_level
 
-    print(f'conf --- {conf}')
 
     return conf
 
