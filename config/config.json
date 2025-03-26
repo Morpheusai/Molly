@@ -16,8 +16,5 @@
     },
     "download":{
         "output_download_url_prefix": "https://mollyseek.com/downloads/"
-    },
-    "special_token":{
-        "response_tag":"#Neo#"
     }
 }

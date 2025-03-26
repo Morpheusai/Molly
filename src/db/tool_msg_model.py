@@ -18,6 +18,7 @@ class ToolModel(Base):
     tool_args = Column(Text, comment='工具调用参数')
     tool_result = Column(Text, comment='工具返回结果')
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
+    tool_result_analysis = Column(Text,  default="", comment='对工具输出结果的分析描述')
 
     # 关联到MessageModel
     message = relationship('MessageModel', back_populates='tools')

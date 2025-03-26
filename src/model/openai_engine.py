@@ -16,7 +16,6 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
         target_url = g_config["url"]["target_stream_url"]
     else:
         target_url = g_config["url"]["target_demo_stream_url"]  
-    response_tag = g_config["special_token"]["response_tag"]
     # 构造请求参数
     json_data = user_input.dict()
 
@@ -27,10 +26,11 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
     tool_messages: List[Dict] = []  # 存储所有 Tool 类型消息
     #用来将流式的消息进行分割
     current_response = None
+    msg_response = None
     flag_i=0
     flag_j=0
-    # 初始化 full_response
-    full_response = ""
+    # 初始化 tool_result_analysis_list
+    tool_result_analysis_list = []
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=300.0)) as client:
         try:
@@ -46,14 +46,14 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                     return
 
                 # # 用于存储 AI 的完整回复
-                # full_response = ""
+                # tool_result_analysis_list = ""
                 # 流式转发数据并收集 AI 和 Tool 消息
                 async for chunk in response.aiter_text():
                     # 检查是否停止
                     if stop_event.is_set():  # 使用 stop_event 检查
                         break
-                    #将 chunk 拼接到 full_response 中
-                    # full_response += chunk
+                    #将 chunk 拼接到 tool_result_analysis_list 中
+                    # tool_result_analysis_list += chunk
                     yield chunk
 
                     # 解析 chunk 并判断是否为 AI 或 Tool 类型
@@ -69,23 +69,49 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                                     flag_j+=1
                                     tool_messages.append(data)
                             elif data.get("type") == "token":    
-                                if flag_i==flag_j:    
+                                if flag_i == flag_j and flag_i == 0:    
+                                    msg_response = (current_response or "") + content
+                                elif flag_i == flag_j :   
                                     content = data.get("content", {})
-                                    current_response = (current_response or "") + content
+                                    current_response = (current_response or "") + content                                    
                                 else:
                                     flag_i+=1
-                                    if current_response is not None:
-                                        full_response+=current_response
-                                        full_response+=response_tag
+                                    #多个工具调用
+                                    if current_response is not None and flag_i != flag_j:
+                                        tool_result_analysis_list.append(current_response)
+                                        while flag_i == flag_j:
+                                            flag_i+=1
+                                            tool_result_analysis_list.append("")
+                                        
                                         current_response=None
                                         content = data.get("content", {})
-                                        current_response = (current_response or "") + content
+                                        current_response = (current_response or "") + content                                            
+                                            
+                                    elif current_response is not None and flag_i == flag_j:
+                                        tool_result_analysis_list.append(current_response)
+                                        current_response=None
+                                        content = data.get("content", {})
+                                        current_response = (current_response or "") + content      
+                                    #解决开头token丢失问题
+                                    elif current_response is None and flag_i == flag_j:   
+                                        content = data.get("content", {})
+                                        current_response = (current_response or "") + content 
+
+                                    elif current_response is None and flag_i != flag_j:   
+                                        while flag_i == flag_j:
+                                            flag_i+=1
+                                            tool_result_analysis_list.append("")                                    
+                                        content = data.get("content", {})
+                                        current_response = (current_response or "") + content  
+ 
+
                         except json.JSONDecodeError as e:
                             # 记录错误信息和出错的内容
                             logger.error(f"JSONDecodeError encountered: {e}")
                             logger.error(f"Failed to parse chunk: {chunk[5:].strip()}")
                 if current_response is not None:
-                    full_response+=current_response      
+                    tool_result_analysis_list.append(current_response)
+                    # tool_result_analysis_list+=current_response      
         except httpx.ConnectError as e:
             logger.error(f"Connection error: {str(e)}")
             yield f"data: {json.dumps({'type': 'error', 'content': 'Connection failed'})}\n\n"
@@ -98,5 +124,5 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                 del stop_events[conversation_id]  
        
     # 处理消息
-    await process_messages(msg_id, conversation_id, ai_messages, tool_messages, full_response)            
+    await process_messages(msg_id, conversation_id, ai_messages, tool_messages, tool_result_analysis_list, msg_response)            
 

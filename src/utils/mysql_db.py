@@ -313,6 +313,7 @@ async def search_specific_session_sql(
                     tool_name=tool.tool_name,
                     tool_args=tool.tool_args,
                     tool_result=tool.tool_result,
+                    tool_result_analysis=tool.tool_result_analysis,
                     create_time=tool.create_time.strftime('%Y-%m-%d %H:%M:%S')
                 )
                 for tool in sorted(message.tools, key=lambda x: x.create_time)  # 双重排序保障
@@ -674,11 +675,11 @@ async def process_messages(
     conversation_id: str,
     ai_messages: List[Dict],
     tool_messages: List[Dict],
-    full_response:str
+    tool_result_analysis_list:list,
+    msg_response:str
 ):
 
-    # 第一步：更新 message 表的 response 字段
-    final_ai_content = ""
+
 
     # 找到最后一个有内容的 AI 消息
     # for ai_msg in ai_messages:
@@ -696,9 +697,9 @@ async def process_messages(
         result = await session.execute(select(MessageModel).filter_by(id=msg_id))
         m=result.scalars().first()
         if m is not None:
-            # json_str = json.dumps(full_response, ensure_ascii=False)
+            # json_str = json.dumps(tool_result_analysis_list, ensure_ascii=False)
 
-            m.response = full_response
+            m.response = msg_response
             session.add(m)
             await session.commit()
     except Exception as e:
@@ -726,7 +727,7 @@ async def process_messages(
     tool_files = []
     # 初始化基准时间（循环开始前记录）
     base_time = datetime.now()
-    for tool_msg in tool_messages:
+    for index,tool_msg in enumerate(tool_messages):
         # 解析 content 字段中的 JSON 字符串
         content_dict = json.loads(tool_msg['content']['content'])
         if 'url' in content_dict:
@@ -773,25 +774,8 @@ async def process_messages(
             # 每次循环增加1秒
             current_time = base_time + timedelta(seconds=len(tool_models))
 
-            # # 解析 tool_result
-            # tool_result_str = content.get('content', '')
-            # try:
-            #     tool_result_dict = ast.literal_eval(tool_result_str)
-            #     print(tool_result_dict)
-            # except (SyntaxError, ValueError) as e:
-            #     print(f"解析 tool_result 失败: {e}")
-            #     tool_result_dict = {}  # 如果解析失败，设置为空字典    
-            # print("ID:", new_id)
-            # print("Message ID:", msg_id)  # 关联到 message 表的 ID
-            # print("Conversation ID:", conversation_id)
-            # print("Tool ID:", tool_call_id)
-            # print("Tool Name:", tool_info["name"])
-            # print("Tool Args:", json.dumps(tool_info["args"]))  # 将 args 转为 JSON 字符串
-            # print("Tool Result:", content.get('content', "")) 
-            #  # 当前工具返回的是一个json，text/link
-            # print(".....................")
-            # print("Tool Result:", json.dumps(content.get('content', "")))
-            # print("Create Time:", current_time) 
+            # 获取对应索引的分析结果
+            tool_analysis = tool_result_analysis_list[index] if index < len(tool_result_analysis_list) else ""
             tool_models.append(
                 ToolModel(
                     id=new_id,
@@ -803,6 +787,7 @@ async def process_messages(
                     #tool_result=content.get('content', ''), #当前工具返回的是一个json，text/link
                     tool_result=content.get('content', ""), 
                     create_time=current_time,
+                    tool_result_analysis=tool_analysis
                 )
             )
         
