@@ -26,12 +26,13 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
     tool_messages: List[Dict] = []  # 存储所有 Tool 类型消息
     #用来将流式的消息进行分割
     current_response = None
-    msg_response = None
+    msg_response = ""
     flag_i=0
     flag_j=0
-    # 初始化 tool_result_analysis_list
+    # 初始化 
     tool_result_analysis_list = []
-
+    content_dict={}
+    content=""
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=300.0)) as client:
         try:
             async with client.stream(
@@ -61,18 +62,19 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                         try:
                             data = json.loads(chunk[5:].strip())
                             if data.get("type") == "message":
-                                content = data.get("content", {})
-                                msg_type = content.get("type")
+                                content_dict = data.get("content", {})
+                                msg_type = content_dict.get("type")
                                 if msg_type == "ai":
                                     ai_messages.append(data)
                                 elif msg_type == "tool":
                                     flag_j+=1
                                     tool_messages.append(data)
                             elif data.get("type") == "token":    
-                                if flag_i == flag_j and flag_i == 0:    
-                                    msg_response = (current_response or "") + content
+                                if flag_i == flag_j and flag_i == 0:  
+                                    content = data.get("content", "")  
+                                    msg_response +=  content
                                 elif flag_i == flag_j :   
-                                    content = data.get("content", {})
+                                    content = data.get("content", "")
                                     current_response = (current_response or "") + content                                    
                                 else:
                                     flag_i+=1
@@ -84,24 +86,24 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                                             tool_result_analysis_list.append("")
                                         
                                         current_response=None
-                                        content = data.get("content", {})
+                                        content = data.get("content", "")
                                         current_response = (current_response or "") + content                                            
                                             
                                     elif current_response is not None and flag_i == flag_j:
                                         tool_result_analysis_list.append(current_response)
                                         current_response=None
-                                        content = data.get("content", {})
+                                        content = data.get("content", "")
                                         current_response = (current_response or "") + content      
                                     #解决开头token丢失问题
                                     elif current_response is None and flag_i == flag_j:   
-                                        content = data.get("content", {})
+                                        content = data.get("content", "")
                                         current_response = (current_response or "") + content 
 
                                     elif current_response is None and flag_i != flag_j:   
                                         while flag_i == flag_j:
                                             flag_i+=1
                                             tool_result_analysis_list.append("")                                    
-                                        content = data.get("content", {})
+                                        content = data.get("content", "")
                                         current_response = (current_response or "") + content  
  
 
@@ -117,7 +119,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
             yield f"data: {json.dumps({'type': 'error', 'content': 'Connection failed'})}\n\n"
         except Exception as e:
             logger.error(f"Stream error: {str(e)}", exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'content': f'Unexpected error1: {str(e)}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': f'Unexpected error: {str(e)}'})}\n\n"
         finally:
             # 清理 stop_events 字典
             if conversation_id in stop_events:
