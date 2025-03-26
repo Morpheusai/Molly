@@ -299,7 +299,7 @@ async def search_specific_session_sql(
                 ok=1,
                 failed="No data found",
                 session_id=request.session_id,
-                session_title=None,
+                session_title="",
                 chats=[],
                 files=[]
             )
@@ -361,7 +361,7 @@ async def search_specific_session_sql(
             ok=1,
             failed=str(e),
             session_id=request.session_id,
-            session_title=None,
+            session_title="",
             chat_type=conversation.chat_type,
             chats=[],
             files=[]
