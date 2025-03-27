@@ -790,7 +790,6 @@ async def process_messages(
                     tool_result_analysis=tool_analysis
                 )
             )
-        
     # 批量插入工具数据
     if tool_models:
         try:
