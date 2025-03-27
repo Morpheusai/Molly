@@ -30,7 +30,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         conversation = ConversationModel(
             id=new_conversation_id,
             user_id=user_id,
-            session_title="MHC-I分子结合亲和力预测AI助手",
+            session_title="肽段-MHC亲和力智能筛选助手",
             chat_type="demo",#config,
             create_time=datetime.strptime("2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
         )
@@ -65,12 +65,12 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         uploaded_file = UploadedFile(
             id=str(uuid.uuid4()),
             conversation_id=new_conversation_id,
-            file_name="B0702.fsa",
-            file_path="minio://molly/8e81f329-a602-4b0c-bc69-2b110033d594_B0702.fsa",
+            file_name="testSeq.fsa",
+            file_path="minio://molly/6b5a0a9b-4dc3-420d-b53d-a4ca375c51d1_testSeq.fsa",
             file_desc="mRNA疫苗序列分析",
             file_type="application/octet-stream",
-            file_size=373,
-            file_hash="6ba6e3e00aabaa3b83395a0afbc213e78837d1ba904d2233e42e3e76c45cdfda",
+            file_size=411,
+            file_hash="ae840fb19516a28418991cf7f58f665b4fef79ba683f0ae9a2425197124484dd",
             file_status=True,
             file_origin=0,
             create_time=datetime.strptime("2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
