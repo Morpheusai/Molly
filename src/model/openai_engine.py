@@ -69,7 +69,8 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                                 elif msg_type == "tool":
                                     flag_j+=1
                                     tool_messages.append(data)
-                            elif data.get("type") == "token":    
+                            elif data.get("type") == "token":  
+                                #添加response信息  
                                 if flag_i == flag_j and flag_i == 0:  
                                     content = data.get("content", "")  
                                     msg_response +=  content
@@ -81,7 +82,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                                     #多个工具调用
                                     if current_response is not None and flag_i != flag_j:
                                         tool_result_analysis_list.append(current_response)
-                                        while flag_i == flag_j:
+                                        while flag_i < flag_j:
                                             flag_i+=1
                                             tool_result_analysis_list.append("")
                                         
@@ -100,7 +101,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                                         current_response = (current_response or "") + content 
 
                                     elif current_response is None and flag_i != flag_j:   
-                                        while flag_i == flag_j:
+                                        while flag_i < flag_j:
                                             flag_i+=1
                                             tool_result_analysis_list.append("")                                    
                                         content = data.get("content", "")
