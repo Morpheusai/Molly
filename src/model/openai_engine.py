@@ -67,8 +67,10 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                         message, buffer = buffer.split("\n\n", 1)
                         # 补回分隔符，保持 SSE 格式   
                         message += "\n\n"  
-                        # 存入队列（完整的 SSE 消息） 
-                        chunk_queue.append(message)
+                        # 跳过 [DONE] 消息不入队列
+                        if "data: [DONE]" not in message:
+                            # 存入队列（完整的 SSE 消息） 
+                            chunk_queue.append(message)                        
                     yield chunk
         except httpx.ConnectError as e:
             logger.error(f"Connection error: {str(e)}")
