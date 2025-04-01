@@ -1,6 +1,5 @@
 import base64
 import os
-import re
 import uuid
 import weblogo
 
@@ -26,6 +25,7 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 router = APIRouter(tags=["weblogo_generate"])
 
+
 @router.post("/generate_weblogo")
 async def generate_weblogo_endpoint(request: WebLogoRequest):
     """
@@ -35,11 +35,13 @@ async def generate_weblogo_endpoint(request: WebLogoRequest):
     """
     try:
         # 验证 token
-        payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode_vaild(request.system_token,
+                               SECRET_KEY, algorithms=[ALGORITHM])
         unionid = payload.get("sub")
         if not unionid:
-            raise HTTPException(status_code=401, detail="Invalid or missing unionid")
-        
+            raise HTTPException(
+                status_code=401, detail="Invalid or missing unionid")
+
         png_output = generate_weblogo(request.peptide_sequences)
 
         return {
@@ -59,7 +61,8 @@ async def generate_weblogo_endpoint(request: WebLogoRequest):
             "ok": 1,
             "failed": f"Unexpected error: {str(e)}"
         }
-    
+
+
 def generate_weblogo(peptide_sequences: list, logo_type: str = 'png', logo_title: str = "Sequence Motif Analysis", color_scheme: str = "auto"):
     """
     使用 WebLogo 生成序列 Logo 图像。
@@ -77,7 +80,7 @@ def generate_weblogo(peptide_sequences: list, logo_type: str = 'png', logo_title
     output_image_name = f"{uuid.uuid4().hex}_weblogo.{logo_type}"
     temp_output_image_path = Path(TEMP_OUTPUT_IMAGE_DIR) / output_image_name
     try:
-        
+
         temp_txt_path.write_text("\n".join(peptide_sequences))
 
         # 读取序列数据
@@ -90,11 +93,12 @@ def generate_weblogo(peptide_sequences: list, logo_type: str = 'png', logo_title
         # 设置 Logo 生成选项
         options = LogoOptions()
         options.logo_title = logo_title
-        options.small_fontsize = 3    
-        options.title_fontsize = 8     
-        options.number_fontsize = 4  
-        options.fontsize = 8        
-        options.color_scheme = weblogo.std_color_schemes.get(color_scheme, weblogo.std_color_schemes["auto"])
+        options.small_fontsize = 3
+        options.title_fontsize = 8
+        options.number_fontsize = 4
+        options.fontsize = 8
+        options.color_scheme = weblogo.std_color_schemes.get(
+            color_scheme, weblogo.std_color_schemes["auto"])
         options.unit_name = "bits"
         options.show_yaxis = True
         options.yaxis_label = "Information (bits)"
@@ -125,11 +129,12 @@ def generate_weblogo(peptide_sequences: list, logo_type: str = 'png', logo_title
             logo = weblogo.svg_formatter(data, format)  # 处理 SVG 格式
         else:
             raise ValueError(f"不支持的图像格式: {logo_type}")
-        
+
         with open(temp_output_image_path, "wb") as f:
             f.write(logo)
-            
-        file_url, error = upload_to_minio(str(temp_output_image_path), output_image_name)
+
+        file_url, error = upload_to_minio(
+            str(temp_output_image_path), output_image_name)
         file_path = file_url if not error else f"{DOWNLOADER_PREFIX}{output_image_name}"
         if file_path.startswith("minio://"):
             logger.info(f"minio上传成功")
@@ -145,6 +150,7 @@ def generate_weblogo(peptide_sequences: list, logo_type: str = 'png', logo_title
     except Exception as e:
         print(f"生成 WebLogo 时出错: {e}")
         return None
+
 
 def upload_to_minio(file_path: str, output_filename: str):
     try:

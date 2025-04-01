@@ -1,30 +1,35 @@
-from sqlalchemy import Column, String, CHAR, DateTime,func,Integer
+from sqlalchemy import Column, String, DateTime, func, Integer
 from sqlalchemy.orm import relationship
+
 from src.utils.base import Base
-from src.db.conversation_model import ConversationModel
+
+
 class UserModel(Base):
     __tablename__ = 'user'
 
-    unionid = Column(String(128), primary_key=True, comment='用户统一标识。针对一个微信开放平台账号下的应用，同一用户的unionid是唯一的')
-    
-    openid = Column(String(128), unique=True, nullable=False, comment='普通用户的标识，对当前开发者账号唯一')
-    
+    unionid = Column(String(128), primary_key=True,
+                     comment='用户统一标识。针对一个微信开放平台账号下的应用，同一用户的unionid是唯一的')
+
+    openid = Column(String(128), unique=True, nullable=False,
+                    comment='普通用户的标识，对当前开发者账号唯一')
+
     nickname = Column(String(64), comment='普通用户昵称')
-    
+
     sex = Column(Integer, comment='普通用户性别，1为男性，2为女性')
-    
+
     province = Column(String(64), comment='普通用户个人资料填写的省份')
-    
+
     city = Column(String(64), comment='普通用户个人资料填写的城市')
-    
+
     country = Column(String(64), comment='国家，如中国为CN')
-    
+
     headimgurl = Column(String(512), comment='用户头像，最后一个数值代表正方形头像大小')
-    
-    privilege = Column(String(512), comment='用户特权信息，json数组，如微信沃卡用户为（chinaunicom）')
+
+    privilege = Column(
+        String(512), comment='用户特权信息，json数组，如微信沃卡用户为（chinaunicom）')
 
     phone = Column(String(20), comment='用户手机号')
-    
+
     email = Column(String(128), comment='用户邮箱')
 
     create_time = Column(DateTime, default=func.now(), comment='创建时间')

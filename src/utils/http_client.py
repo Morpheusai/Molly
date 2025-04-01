@@ -1,17 +1,20 @@
-import time
-import requests
-import queue
 import logging
+import queue
+import requests
+import time
+
 from fastapi import status, HTTPException
 from concurrent.futures import ThreadPoolExecutor
 
+
 def raise_http_exception(result_code, result_message, status_code=status.HTTP_400_BAD_REQUEST):
     resp = {
-        "result_code":result_code,
-        "result_message":result_message
+        "result_code": result_code,
+        "result_message": result_message
     }
     logging.error(f'User operation failed: resp {resp}')
     raise HTTPException(status_code=status_code, detail=resp)
+
 
 class HttpClient(object):
     _instance = None
@@ -20,7 +23,8 @@ class HttpClient(object):
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
-            cls._instance = super(HttpClient, cls).__new__(cls, *args, **kwargs)
+            cls._instance = super(HttpClient, cls).__new__(
+                cls, *args, **kwargs)
         return cls._instance
 
     def __init__(self):
@@ -54,7 +58,8 @@ class HttpClient(object):
         """
         def http_request(url, method="GET", params=None, data=None, headers=None, timeout=5):
             try:
-                requests.request(method, url, params=params, data=data, json=json, headers=headers, timeout=timeout)
+                requests.request(method, url, params=params, data=data,
+                                 json=json, headers=headers, timeout=timeout)
             except requests.exceptions.Timeout as e:
                 logging.error(f"Timeout error sending request to {url}: {e}")
                 request = {
@@ -72,11 +77,12 @@ class HttpClient(object):
                 logging.error(f"Error sending request to {url}: {e}")
                 raise e
 
-        try :
-            HttpClient.executor.submit(http_request, url, method, params, data, headers, timeout)
+        try:
+            HttpClient.executor.submit(
+                http_request, url, method, params, data, headers, timeout)
         except Exception as e:
             raise e
-    
+
     @staticmethod
     def execute_wait_response(url, method="GET", params=None, data=None, json=None, headers=None, timeout=5):
         """
@@ -99,7 +105,8 @@ class HttpClient(object):
         execute_times = 0
         while True:
             try:
-                response = requests.request(method, url, params=params, data=data, json=json, headers=headers, timeout=timeout)
+                response = requests.request(
+                    method, url, params=params, data=data, json=json, headers=headers, timeout=timeout)
                 return response
             except requests.exceptions.Timeout as e:
                 logging.error(f"Timeout error sending request to {url}: {e}")
@@ -109,4 +116,6 @@ class HttpClient(object):
             except Exception as e:
                 logging.error(f"Error sending request to {url}: {e}")
                 return None
+
+
 client = HttpClient()

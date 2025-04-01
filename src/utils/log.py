@@ -1,8 +1,8 @@
-import os
-import sys
-import platform
 import logging
 import logging.config as log_config
+import os
+import platform
+
 from src.config import g_config
 
 # 判断操作系统类型
@@ -58,6 +58,7 @@ logger_config = {
     }
 }
 
+
 def config_logger(log_dir, log_level, name):
     # config logger
     if not log_level:
@@ -70,11 +71,14 @@ def config_logger(log_dir, log_level, name):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     log_config.dictConfig(logger_config)
 
+
 # 创建日志存储路径
-LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), g_config["log"]['log_path'])
+LOG_PATH = os.path.join(os.path.dirname(
+    os.path.dirname(__file__)), g_config["log"]['log_path'])
 if not os.path.exists(LOG_PATH):
     os.mkdir(LOG_PATH)
 
-config_logger(g_config["log"]['log_path'], g_config["log"]['log_level'], f"server")
+config_logger(g_config["log"]['log_path'],
+              g_config["log"]['log_level'], f"server")
 
 logger = logging.getLogger()

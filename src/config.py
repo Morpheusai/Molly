@@ -1,10 +1,12 @@
-import os
 import json
+import os
+
 
 def load_local_config():
     # default config
     conf = {}
-    default_config_file = os.path.join(os.path.dirname(__file__), '../config/config.json')
+    default_config_file = os.path.join(
+        os.path.dirname(__file__), '../config/config.json')
     if os.path.exists(default_config_file):
         with open(default_config_file, 'r', encoding='utf-8') as f:
             conf = json.load(f)
@@ -13,7 +15,7 @@ def load_local_config():
     if log_level:
         conf["log_level"] = log_level
 
-
     return conf
+
 
 g_config = load_local_config()

@@ -1,8 +1,10 @@
 import os
 import re
+
 from fastapi import Body, HTTPException, APIRouter
 from fastapi.responses import StreamingResponse
 from minio.error import S3Error
+
 from src.api.protocols import DownloadFileRequest
 from src.utils.log import logger
 from src.utils.jwt_util import decode_vaild  # 修正拼写错误
@@ -17,10 +19,11 @@ MINIO_URL_PATTERN = re.compile(r"^minio://([\w-]+)/(.+)$")
 
 router = APIRouter(tags=["file-download"])
 
+
 @router.post("/download")
 async def download_file(
     request: DownloadFileRequest = Body(...)
-    ) -> StreamingResponse:
+) -> StreamingResponse:
     """Download a file from MinIO after token validation.
 
     Args:
@@ -31,16 +34,19 @@ async def download_file(
     """
     # 1. **验证 Token 并处理过期情况**
     try:
-        payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode_vaild(request.system_token,
+                               SECRET_KEY, algorithms=[ALGORITHM])
         unionid = payload.get("sub")
         if not unionid:
-            raise HTTPException(status_code=401, detail="Invalid or missing unionid")
-        
+            raise HTTPException(
+                status_code=401, detail="Invalid or missing unionid")
+
         # 检查 Token 是否过期
         if "exp" in payload:
             import time
             if payload["exp"] < time.time():
-                raise HTTPException(status_code=401, detail="Token has expired")
+                raise HTTPException(
+                    status_code=401, detail="Token has expired")
 
     except Exception as e:
         logger.error(f"Token validation failed: {str(e)}")
@@ -49,10 +55,11 @@ async def download_file(
     # 2. **解析 file_path**
     file_path = request.file_path
     match = MINIO_URL_PATTERN.match(file_path)
-    
+
     if not match:
         logger.error(f"Invalid file_path format: {file_path}")
-        raise HTTPException(status_code=400, detail="Invalid file path format. Expected 'minio://bucket_name/object_name'.")
+        raise HTTPException(
+            status_code=400, detail="Invalid file path format. Expected 'minio://bucket_name/object_name'.")
 
     bucket_name, object_name = match.groups()
 
@@ -87,9 +94,11 @@ async def download_file(
             }
         )
     except S3Error as minio_error:
-        logger.error(f"MinIO download failed for {object_name}: {str(minio_error)}")
-        raise HTTPException(status_code=404, detail=f"File not found: {str(minio_error)}")
+        logger.error(
+            f"MinIO download failed for {object_name}: {str(minio_error)}")
+        raise HTTPException(
+            status_code=404, detail=f"File not found: {str(minio_error)}")
     except Exception as e:
         logger.error(f"Unexpected error downloading {file_path}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
-    
+        raise HTTPException(
+            status_code=500, detail=f"Download failed: {str(e)}")

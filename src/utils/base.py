@@ -1,17 +1,16 @@
+import os
+
+from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy.orm import sessionmaker
 from urllib.parse import quote_plus
-import os
-from dotenv import load_dotenv
-
-import json
 
 load_dotenv()
 
 user = os.getenv("DB_USER", "")
 host = os.getenv("DB_HOST", "")
-port= int(os.getenv("DB_PORT", "-1"))
+port = int(os.getenv("DB_PORT", "-1"))
 database = os.getenv("DB_NAME", "")
 password = os.getenv("DB_PASSWORD", "")
 encoded_password = quote_plus(password)
@@ -29,11 +28,7 @@ async_engine = create_async_engine(
 )
 
 
-AsyncSessionLocal = sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
+AsyncSessionLocal = sessionmaker(
+    bind=async_engine, class_=AsyncSession, expire_on_commit=False)
 
 Base: DeclarativeMeta = declarative_base()
-
-
-
-
-

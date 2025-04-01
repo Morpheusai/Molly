@@ -1,2 +1,2 @@
-## web_molly_backend
+## web_neo_backend
 nohup uvicorn src.app:app  --host 0.0.0.0 --port 60718 1>>log 2>>err &

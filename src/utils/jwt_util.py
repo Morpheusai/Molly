@@ -1,26 +1,31 @@
 import os
+import uuid
 
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from fastapi import HTTPException, status
-from src.utils import logger
-from src.utils.session import with_async_session
-from src.api.protocols import BaseResponse
 from jose import JWTError, jwt
-from src.db.user_token_model import UserToken
-from datetime import datetime, timedelta, timezone 
-import uuid
 from sqlalchemy.future import select
+
+from src.api.protocols import BaseResponse
+from src.db.user_token_model import UserToken
+from src.utils.session import with_async_session
+
 load_dotenv()
 
 # JWT 配置
-SECRET_KEY = os.getenv("SECRET_KEY", "") # 用于签名和验证 JWT 的密钥
-ALGORITHM = os.getenv("ALGORITHM", "HS256") # 加密算法
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # JWT Token 过期时间
+SECRET_KEY = os.getenv("SECRET_KEY", "")  # 用于签名和验证 JWT 的密钥
+ALGORITHM = os.getenv("ALGORITHM", "HS256")  # 加密算法
+ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # JWT Token 过期时间
 
 # 生成 JWT Token,并添加到数据库中
+
+
 @with_async_session
 async def create_system_token(session, unionid: str, wechat_access_token: str):
-    expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + \
+        timedelta(hours=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {"sub": unionid, "exp": expire}
     system_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -64,6 +69,8 @@ async def create_system_token(session, unionid: str, wechat_access_token: str):
         )
 
 # 解码并验证 JWT Token
+
+
 def decode_vaild(token: str, secret_key: str, algorithms: list = None):
     try:
         payload = jwt.decode(token, secret_key, algorithms)

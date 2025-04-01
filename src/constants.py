@@ -1,5 +1,3 @@
-
-import enum
 from enum import Enum, IntEnum
 
 class CodeAgentState(Enum):

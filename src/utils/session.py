@@ -1,7 +1,8 @@
-from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
-from src.utils.base import AsyncSessionLocal
 from functools import wraps
+
+from src.utils.base import AsyncSessionLocal
+
 
 @asynccontextmanager
 async def async_session_scope():
@@ -15,6 +16,7 @@ async def async_session_scope():
     finally:
         await session.close()
 
+
 def with_async_session(f):
     @wraps(f)
     async def wrapper(*args, **kwargs):
@@ -22,9 +24,7 @@ def with_async_session(f):
             return await f(session, *args, **kwargs)
     return wrapper
 
+
 async def get_async_db():
     async with AsyncSessionLocal() as db:
         yield db
-
-
-

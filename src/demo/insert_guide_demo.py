@@ -7,19 +7,20 @@ from sqlalchemy.orm import sessionmaker
 
 from src.db.conversation_model import ConversationModel
 from src.db.message_model import MessageModel
-from src.db.tool_msg_model import ToolModel
 from src.db.uploadfiles_model import UploadedFile
 from src.utils.base import Base, async_engine
 from src.utils.log import logger
-#TODO 优化 加 config json data
+
+
+# TODO 优化 加 config json data
 async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
     """
     将硬编码的 JSON 数据插入到数据库中，并返回与原始 JSON 一致的响应。
-    
+
     Args:
         session: SQLAlchemy AsyncSession 对象
         user_id: 用户的 unionid
-    
+
     Returns:
         与原始 JSON 格式一致的字典
 
@@ -31,13 +32,14 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             id=new_conversation_id,
             user_id=user_id,
             session_title="肽段-MHC亲和力智能筛选助手",
-            chat_type="demo",#config,
-            create_time=datetime.strptime("2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
+            chat_type="demo",  # config,
+            create_time=datetime.strptime(
+                "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
         )
         session.add(conversation)
 
         response_text = \
-"""
+            """
 🌟 **欢迎来到个性化疫苗 AI 预测助手！** 🌟
 我们可以帮助您**从候选抗原序列中筛选出与MHC-I 分子结合亲和力最强的肽段**，以便更好地评估它们的免疫潜力。 
 💡 **简单操作流程**：
@@ -52,11 +54,13 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
 
         messages = [
             MessageModel(
-                id=str(uuid.uuid4()),#"04abe03e-92d0-41d1-afc6-25de0b861e6b",
+                # "04abe03e-92d0-41d1-afc6-25de0b861e6b",
+                id=str(uuid.uuid4()),
                 conversation_id=new_conversation_id,
                 query="",
                 response=response_text,
-                create_time=datetime.strptime("2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
+                create_time=datetime.strptime(
+                    "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
             ),
         ]
         for message in messages:
@@ -73,10 +77,11 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             file_hash="ae840fb19516a28418991cf7f58f665b4fef79ba683f0ae9a2425197124484dd",
             file_status=True,
             file_origin=0,
-            create_time=datetime.strptime("2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
-            
+            create_time=datetime.strptime(
+                "2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
+
         )
-        session.add(uploaded_file)            
+        session.add(uploaded_file)
 
         # 提交事务
         await session.commit()
@@ -84,7 +89,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         return {
             "ok": 0,
             "failed": "",
-            "session_id": new_conversation_id,  
+            "session_id": new_conversation_id,
             "session_title": "DEMO",
         }
 
@@ -98,6 +103,8 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             "chats": [],
             "files": []
         }
+
+
 async def insert_guide_demo(user_id: str):
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

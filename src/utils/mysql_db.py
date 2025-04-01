@@ -1,32 +1,22 @@
-# 标准库
-import ast
 import json
 import os
 import uuid
 from datetime import datetime, timedelta
 from typing import List
 
-# 第三方库
 from dotenv import load_dotenv
 from fastapi import (
-    Body, 
-    Depends, 
-    HTTPException, 
-    Response, 
+    Body,
+    Depends,
+    HTTPException,
     status
 )
-from fastapi.responses import JSONResponse
-from jose import JWTError, jwt
-from passlib.hash import bcrypt
-from pydantic import BaseModel, Field
 from sqlalchemy import delete, desc
 from sqlalchemy.dialects.mysql import insert
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload, sessionmaker
+from sqlalchemy.orm import selectinload
 
-# 本地模块
 from src.api.protocols import *
 from src.db.conversation_model import ConversationModel
 from src.db.message_model import MessageModel
@@ -37,34 +27,34 @@ from src.db.user_model import UserModel
 from src.utils.jwt_util import decode_vaild
 from src.utils.session import get_async_db, with_async_session
 load_dotenv()
-SECRET_KEY = os.getenv("SECRET_KEY", "") # 用于签名和验证 JWT 的密钥
-ALGORITHM = os.getenv("ALGORITHM", "HS256") # 加密算法
+SECRET_KEY = os.getenv("SECRET_KEY", "")  # 用于签名和验证 JWT 的密钥
+ALGORITHM = os.getenv("ALGORITHM", "HS256")  # 加密算法
 
-#查询unionid的记录
+# 查询unionid的记录
 @with_async_session
 async def search_unionid_sql(session,  unionid: str = None):
     result = await session.execute(select(UserModel).where(UserModel.unionid == unionid))
     user = result.scalars().first()
     return user
 
-#添加用户记录sql
+# 添加用户记录sql
 @with_async_session
 async def add_user_sql(session,  request: AddUserRequest = None):
     try:
         user = UserModel(
-        unionid=request.unionid,
-        openid=request.openid,
-        nickname=request.nickname,
-        sex=request.sex,
-        province=request.province,
-        city=request.city,
-        country=request.country,
-        headimgurl=request.headimgurl,
-        privilege=request.privilege,
-        phone=request.phone,
-        email=request.email,
-        create_time=datetime.now(),
-    )
+            unionid=request.unionid,
+            openid=request.openid,
+            nickname=request.nickname,
+            sex=request.sex,
+            province=request.province,
+            city=request.city,
+            country=request.country,
+            headimgurl=request.headimgurl,
+            privilege=request.privilege,
+            phone=request.phone,
+            email=request.email,
+            create_time=datetime.now(),
+        )
         session.add(user)
         await session.commit()
         await session.refresh(user)
@@ -80,21 +70,21 @@ async def add_user_sql(session,  request: AddUserRequest = None):
             failed=str(e)
         )
 
-#查询用户信息sql
-async def query_user_info_sql(session:AsyncSession= Depends(get_async_db),  request: QueryUserInfoRequest = Body(...)):
+# 查询用户信息sql
+async def query_user_info_sql(session: AsyncSession = Depends(get_async_db),  request: QueryUserInfoRequest = Body(...)):
     try:
         user = await session.execute(select(UserModel).where(UserModel.unionid == request.unionid))
         user = user.scalar_one_or_none()
         return QueryUserInfoResponse(
-        unionid=user.unionid,
-        openid=user.openid,
-        nickname=user.nickname,
-        sex=user.sex,
-        province=user.province,
-        city=user.city,
-        country=user.country,
-        headimgurl=user.headimgurl,
-        privilege=user.privilege,
+            unionid=user.unionid,
+            openid=user.openid,
+            nickname=user.nickname,
+            sex=user.sex,
+            province=user.province,
+            city=user.city,
+            country=user.country,
+            headimgurl=user.headimgurl,
+            privilege=user.privilege,
         )
     except Exception as e:
         await session.rollback()
@@ -103,7 +93,7 @@ async def query_user_info_sql(session:AsyncSession= Depends(get_async_db),  requ
             failed=str(e)
         )
 
-#删除单一会话sql
+# 删除单一会话sql
 async def delete_specific_session_sql(
     session: AsyncSession = Depends(get_async_db),
     request: DeleteSessionRequest = Body(...),
@@ -114,14 +104,15 @@ async def delete_specific_session_sql(
     :param request: 删除会话的请求模型
     :return: BaseResponse
     """
-    #检验token有效性    
-    payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
+    # 检验token有效性
+    payload = decode_vaild(request.system_token,
+                           SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
         raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="unionid不存在",
-    )
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="unionid不存在",
+        )
     async with session.begin():
         # 检查是否存在指定的会话，并且会话属于当前用户
         result = await session.execute(
@@ -143,7 +134,7 @@ async def delete_specific_session_sql(
         await session.execute(
             delete(ToolModel)
             .where(ToolModel.conversation_id == request.session_id)
-        )      
+        )
 
         # 删除与会话关联的所有消息
         await session.execute(
@@ -151,13 +142,11 @@ async def delete_specific_session_sql(
             .where(MessageModel.conversation_id == request.session_id)
         )
 
-        #删除于会话关联的上传文件信息
+        # 删除于会话关联的上传文件信息
         await session.execute(
             delete(UploadedFile)
             .where(UploadedFile.conversation_id == request.session_id)
         )
-
-  
 
         # 删除会话
         await session.delete(conversation)
@@ -176,19 +165,20 @@ async def delete_specific_session_sql(
             failed=str(e)
         )
 
-#清空所有会话sql
+# 清空所有会话sql
 async def delete_sessions_sql(
     session: AsyncSession = Depends(get_async_db),
     request: DelAllSessionsRequest = Body(...)
 ):
-    #检验token有效性    
-    payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
+    # 检验token有效性
+    payload = decode_vaild(request.system_token,
+                           SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
         raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="unionid不存在",
-    )    
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="unionid不存在",
+        )
     try:
         async with session.begin():
             # 查询该用户的所有会话 ID
@@ -206,7 +196,7 @@ async def delete_sessions_sql(
                     ok=0,
                     failed=""
                 )
-            
+
             # 删除所有会话关联的工具
             await session.execute(
                 delete(ToolModel).where(
@@ -246,7 +236,7 @@ async def delete_sessions_sql(
             failed=str(e)
         )
 
-#查询单一会话历史sql
+# 查询单一会话历史sql
 async def search_specific_session_sql(
     session: AsyncSession = Depends(get_async_db),
     request: QuerySingleSessionRequest = Body(...)
@@ -254,8 +244,9 @@ async def search_specific_session_sql(
     """
     查询单一会话历史的逻辑
     """
-    # 检验token有效性    
-    payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
+    # 检验token有效性
+    payload = decode_vaild(request.system_token,
+                           SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
         raise HTTPException(
@@ -265,7 +256,8 @@ async def search_specific_session_sql(
 
     try:
         # 查询Conversation以获取session_title并验证会话存在性和权限
-        conversation_query = select(ConversationModel).where(ConversationModel.id == request.session_id)
+        conversation_query = select(ConversationModel).where(
+            ConversationModel.id == request.session_id)
         conversation_result = await session.execute(conversation_query)
         conversation = conversation_result.scalars().first()
 
@@ -316,17 +308,16 @@ async def search_specific_session_sql(
                     tool_result_analysis=tool.tool_result_analysis,
                     create_time=tool.create_time.strftime('%Y-%m-%d %H:%M:%S')
                 )
-                for tool in sorted(message.tools, key=lambda x: x.create_time)  # 双重排序保障
+                # 双重排序保障
+                for tool in sorted(message.tools, key=lambda x: x.create_time)
             ]
 
-            
-            
             # print(f"Tools for message ID {message.id}:")
             # for tool in tools:
             #     print(f"  - Tool Name: {tool.tool_name}")
             #     print(f"    Tool Args: {tool.tool_args}")
             #     print(f"    Tool Result: {tool.tool_result}")
-            #     print(f"    Create Time: {tool.create_time}")    
+            #     print(f"    Create Time: {tool.create_time}")
 
             chats.append(ChatItemWithTools(
                 id=message.id,
@@ -368,20 +359,21 @@ async def search_specific_session_sql(
         )
 
 
-#查询会话历史sql
+# 查询会话历史sql
 async def search_sessions_sql(
     session: AsyncSession = Depends(get_async_db),
     request: SessionsRequest = Body(...)
 ):
-    #检验token有效性    
-    payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
+    # 检验token有效性
+    payload = decode_vaild(request.system_token,
+                           SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
         raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="unionid不存在",
-    )
-    #查询会话列表的逻辑
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="unionid不存在",
+        )
+    # 查询会话列表的逻辑
     try:
         # 查询该用户的所有会话记录
         result = await session.execute(
@@ -398,15 +390,17 @@ async def search_sessions_sql(
                 ok=2,
                 failed="会话记录为空",
                 sessions=[]
-            )        
+            )
 
         # 构建会话列表
         sessions = []
-        
+
         for record in session_data:
             # 格式化时间为 YYYY-MM-DD HH:MM:SS
-            formatted_update_time = record.updata_time.strftime("%Y-%m-%d %H:%M:%S")
-            formatted_create_time = record.create_time.strftime("%Y-%m-%d %H:%M:%S")
+            formatted_update_time = record.updata_time.strftime(
+                "%Y-%m-%d %H:%M:%S")
+            formatted_create_time = record.create_time.strftime(
+                "%Y-%m-%d %H:%M:%S")
             sessions.append(SessionItem(
                 session_id=record.id,
                 session_title=record.session_title,
@@ -427,7 +421,7 @@ async def search_sessions_sql(
             sessions=[]
         )
 
-#插入单一会话内部-用户输入sql
+# 插入单一会话内部-用户输入sql
 async def insert_user_input_sql(
         session: AsyncSession = Depends(get_async_db),
         request: InsertUserInputSessionRequest = Body(...)
@@ -435,15 +429,15 @@ async def insert_user_input_sql(
 
     try:
         msg = MessageModel(
-        id=str(uuid.uuid4()),
-        conversation_id=request.id,
-        query=request.query,
-        response=request.response,
-        meta_data=request.meta_data,
-        feedback_score=request.feedback_score,
-        feedback_reason=request.feedback_reason,
-        create_time=datetime.now(),
-        )    
+            id=str(uuid.uuid4()),
+            conversation_id=request.id,
+            query=request.query,
+            response=request.response,
+            meta_data=request.meta_data,
+            feedback_score=request.feedback_score,
+            feedback_reason=request.feedback_reason,
+            create_time=datetime.now(),
+        )
         # 添加到数据库会话
         session.add(msg)
         # 提交到数据库
@@ -460,26 +454,26 @@ async def insert_user_input_sql(
             ok=1,
             failed=str(e)
         )
-    
-#chat路由插入单一会话内部-用户输入sql
+
+# chat路由插入单一会话内部-用户输入sql
 @with_async_session
 async def insert_user_input_chat(
         session,
-        conversation_id:str,
-        query:str
+        conversation_id: str,
+        query: str
 ):
 
     try:
         msg = MessageModel(
-        id=str(uuid.uuid4()),
-        conversation_id=conversation_id,
-        query=query,
-        response=None,
-        meta_data=None,
-        feedback_score=None,
-        feedback_reason=None,
-        create_time=datetime.now(),
-        )    
+            id=str(uuid.uuid4()),
+            conversation_id=conversation_id,
+            query=query,
+            response=None,
+            meta_data=None,
+            feedback_score=None,
+            feedback_reason=None,
+            create_time=datetime.now(),
+        )
         # 添加到数据库会话
         session.add(msg)
         # 提交到数据库
@@ -492,23 +486,21 @@ async def insert_user_input_chat(
         return BaseResponse(
             ok=1,
             failed=str(e)
-        )    
-
-    
-#插入单一会话内部-AI回复sql
+        )
+# 插入单一会话内部-AI回复sql
 @with_async_session
 async def insert_ai_input_sql(
         session,
-        msg_id:str,
-        response:str,
+        msg_id: str,
+        response: str,
 ):
     try:
         result = await session.execute(select(MessageModel).filter_by(id=msg_id))
-        m=result.scalars().first()
+        m = result.scalars().first()
         if m is not None:
             if response is not None:
                 m.response = response
-            session.add(m)    
+            session.add(m)
             await session.commit()
         return BaseResponse(
             ok=0,
@@ -521,27 +513,28 @@ async def insert_ai_input_sql(
             failed=str(e)
         )
 
-#新建会话记录sql
+# 新建会话记录sql
 async def add_sessions_sql(
         session: AsyncSession = Depends(get_async_db),
-        request: AddSessionRequest = Body(...)        
+        request: AddSessionRequest = Body(...)
 ):
-    #检验token有效性    
-    payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
+    # 检验token有效性
+    payload = decode_vaild(request.system_token,
+                           SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
         raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="unionid不存在",
-    )    
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="unionid不存在",
+        )
     try:
         msg = ConversationModel(
-        id=str(uuid.uuid4()),
-        user_id=unionid,
-        session_title=request.session_title,
-        chat_type=request.chat_type,
-        updata_time=datetime.now(),
-        create_time=datetime.now(),
+            id=str(uuid.uuid4()),
+            user_id=unionid,
+            session_title=request.session_title,
+            chat_type=request.chat_type,
+            updata_time=datetime.now(),
+            create_time=datetime.now(),
         )
         # 添加到数据库会话
         session.add(msg)
@@ -559,25 +552,25 @@ async def add_sessions_sql(
         return BaseResponse(
             ok=1,
             failed=str(e)
-            )
+        )
 
 
-
-#返回会话id
+# 返回会话id
 async def get_new_session_id_sql(
         session: AsyncSession = Depends(get_async_db),
-        request: AddSessionRequest = Body(...)        
+        request: AddSessionRequest = Body(...)
 ):
-    #检验token有效性    
-    payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
+    # 检验token有效性
+    payload = decode_vaild(request.system_token,
+                           SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
         raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="unionid不存在",
-    )    
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="unionid不存在",
+        )
     try:
-        id=str(uuid.uuid4())
+        id = str(uuid.uuid4())
         return SessionResponse(
             ok=0,
             failed="",
@@ -587,12 +580,12 @@ async def get_new_session_id_sql(
         return BaseResponse(
             ok=1,
             failed=str(e)
-            )
+        )
 
 
 @with_async_session
 # 使用 UPSERT 操作更新或插入 conversation 记录
-async def upsert_conversation_sql(session,conversation_id: str, unionid: str, prompt:str):
+async def upsert_conversation_sql(session, conversation_id: str, unionid: str, prompt: str):
     try:
         # 确保 prompt 是字符串，并截取前 30 个字符
         truncated_prompt = str(prompt)[:64] if prompt is not None else ""
@@ -619,21 +612,22 @@ async def upsert_conversation_sql(session,conversation_id: str, unionid: str, pr
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"数据库操作失败: {str(e)}",
-        )        
+        )
 
 
 async def update_session_name_sql(
         session: AsyncSession = Depends(get_async_db),
-        request: UpdateSessionRequest = Body(...)        
+        request: UpdateSessionRequest = Body(...)
 ):
-    #检验token有效性    
-    payload = decode_vaild(request.system_token, SECRET_KEY, algorithms=[ALGORITHM])
+    # 检验token有效性
+    payload = decode_vaild(request.system_token,
+                           SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
         raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="unionid不存在",
-    )    
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="unionid不存在",
+        )
     try:
         # 检查会话是否存在且属于当前用户
         result = await session.execute(
@@ -668,6 +662,7 @@ async def update_session_name_sql(
             failed=str(e)
         )
 
+
 @with_async_session
 async def process_messages(
     session,
@@ -675,11 +670,9 @@ async def process_messages(
     conversation_id: str,
     ai_messages: List[Dict],
     tool_messages: List[Dict],
-    tool_result_analysis_list:list,
-    msg_response:str
+    tool_result_analysis_list: list,
+    msg_response: str
 ):
-
-
 
     # 找到最后一个有内容的 AI 消息
     # for ai_msg in ai_messages:
@@ -688,14 +681,14 @@ async def process_messages(
     #         final_ai_content = content.get("content")
     #         break
     # ai_msg=ai_messages[-1]
-    # content = ai_msg.get("content", {})   
-    # if content.get("content"): 
+    # content = ai_msg.get("content", {})
+    # if content.get("content"):
     #     final_ai_content = content.get("content")
 
     # 更新 message 表的 response 字段
     try:
         result = await session.execute(select(MessageModel).filter_by(id=msg_id))
-        m=result.scalars().first()
+        m = result.scalars().first()
         if m is not None:
             # json_str = json.dumps(tool_result_analysis_list, ensure_ascii=False)
 
@@ -707,7 +700,7 @@ async def process_messages(
         return BaseResponse(
             ok=1,
             failed=str(e)
-        )    
+        )
 
     # 第二步：处理 Tool 消息
     tool_calls_map = {}
@@ -723,11 +716,11 @@ async def process_messages(
 
     # 批量插入 Tool 数据
     tool_models = []
-    #批量插入Tool_files数据
+    # 批量插入Tool_files数据
     tool_files = []
     # 初始化基准时间（循环开始前记录）
     base_time = datetime.now()
-    for index,tool_msg in enumerate(tool_messages):
+    for index, tool_msg in enumerate(tool_messages):
         # 解析 content 字段中的 JSON 字符串
         content_dict = json.loads(tool_msg['content']['content'])
         if 'url' in content_dict:
@@ -745,10 +738,10 @@ async def process_messages(
             if target_value == "netmhcpan-results":
                 tool_files.append(
                     ToolFileModel(
-                        id = str(uuid.uuid4()),
-                        tool_id = "acfe6b85-f651-11ef-a368-00163e1ab54a",
-                        file_url = url,
-                        tool_llm_content = tool_llm_content
+                        id=str(uuid.uuid4()),
+                        tool_id="acfe6b85-f651-11ef-a368-00163e1ab54a",
+                        file_url=url,
+                        tool_llm_content=tool_llm_content
                     )
                 )
             else:
@@ -757,10 +750,10 @@ async def process_messages(
             if target_value == "esm-results":
                 tool_files.append(
                     ToolFileModel(
-                        id = str(uuid.uuid4()),
-                        tool_id = "bcfe6b85-f651-11ef-a368-00174e1ab54a",
-                        file_url = url,
-                        tool_llm_content = tool_llm_content
+                        id=str(uuid.uuid4()),
+                        tool_id="bcfe6b85-f651-11ef-a368-00174e1ab54a",
+                        file_url=url,
+                        tool_llm_content=tool_llm_content
                     )
                 )
             else:
@@ -775,7 +768,8 @@ async def process_messages(
             current_time = base_time + timedelta(seconds=len(tool_models))
 
             # 获取对应索引的分析结果
-            tool_analysis = tool_result_analysis_list[index] if index < len(tool_result_analysis_list) else ""
+            tool_analysis = tool_result_analysis_list[index] if index < len(
+                tool_result_analysis_list) else ""
             tool_models.append(
                 ToolModel(
                     id=new_id,
@@ -783,9 +777,10 @@ async def process_messages(
                     conversation_id=conversation_id,
                     tool_id=tool_call_id,
                     tool_name=tool_info["name"],
-                    tool_args=json.dumps(tool_info["args"]),  # 将 args 转为 JSON 字符串
-                    #tool_result=content.get('content', ''), #当前工具返回的是一个json，text/link
-                    tool_result=content.get('content', ""), 
+                    # 将 args 转为 JSON 字符串
+                    tool_args=json.dumps(tool_info["args"]),
+                    # tool_result=content.get('content', ''), #当前工具返回的是一个json，text/link
+                    tool_result=content.get('content', ""),
                     create_time=current_time,
                     tool_result_analysis=tool_analysis
                 )
@@ -800,9 +795,9 @@ async def process_messages(
             return BaseResponse(
                 ok=1,
                 failed=str(e)
-            )   
-        
-    # 批量插入Tool_files数据    
+            )
+
+    # 批量插入Tool_files数据
     if tool_files:
         try:
             session.add_all(tool_files)
@@ -812,4 +807,4 @@ async def process_messages(
             return BaseResponse(
                 ok=1,
                 failed=str(e)
-            ) 
+            )

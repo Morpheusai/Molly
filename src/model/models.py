@@ -2,8 +2,6 @@ from enum_tools import StrEnum
 from typing import TypeAlias
 
 
-
-
 class OpenAIModelName(StrEnum):
     """https://platform.openai.com/docs/models/gpt-4o"""
 
