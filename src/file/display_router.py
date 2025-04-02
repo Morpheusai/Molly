@@ -1,9 +1,10 @@
 import os
 
-from fastapi import APIRouter, Body, HTTPException
-from io import BytesIO
+from fastapi import APIRouter, Body, HTTPException,Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from minio.error import S3Error
 from openpyxl import load_workbook
+from io import BytesIO
 
 from src.api.protocols import DownloadFileRequest
 from src.utils.log import logger
@@ -15,11 +16,12 @@ SECRET_KEY = os.getenv("SECRET_KEY", "")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 router = APIRouter(tags=["file-display"])
-
+security = HTTPBearer()
 
 @router.post("/display")
 async def display_router(
     request: DownloadFileRequest = Body(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Return file content as text from MinIO after token validation.
 
@@ -31,7 +33,9 @@ async def display_router(
     """
     # 1. 验证 token
     try:
-        payload = decode_vaild(request.system_token,
+        # 提取并校验 token
+        system_token = credentials.credentials  # 直接获取Token
+        payload = decode_vaild(system_token,
                                SECRET_KEY, algorithms=[ALGORITHM])
         unionid = payload.get("sub")
         if not unionid:

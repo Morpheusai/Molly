@@ -11,6 +11,7 @@ from fastapi import (
     HTTPException,
     status
 )
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import delete, desc
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -95,8 +96,9 @@ async def query_user_info_sql(session: AsyncSession = Depends(get_async_db),  re
 
 # 删除单一会话sql
 async def delete_specific_session_sql(
-    session: AsyncSession = Depends(get_async_db),
-    request: DeleteSessionRequest = Body(...),
+    session: AsyncSession,
+    credentials: HTTPAuthorizationCredentials,
+    request: DeleteSessionRequest,
 ):
     """
     删除特定会话
@@ -104,8 +106,9 @@ async def delete_specific_session_sql(
     :param request: 删除会话的请求模型
     :return: BaseResponse
     """
-    # 检验token有效性
-    payload = decode_vaild(request.system_token,
+    # 提取并校验 token
+    system_token = credentials.credentials  # 直接获取Token
+    payload = decode_vaild(system_token,
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
@@ -167,11 +170,12 @@ async def delete_specific_session_sql(
 
 # 清空所有会话sql
 async def delete_sessions_sql(
-    session: AsyncSession = Depends(get_async_db),
-    request: DelAllSessionsRequest = Body(...)
+    session: AsyncSession,
+    credentials: HTTPAuthorizationCredentials
 ):
-    # 检验token有效性
-    payload = decode_vaild(request.system_token,
+    # 提取并校验 token
+    system_token = credentials.credentials  # 直接获取Token
+    payload = decode_vaild(system_token,
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
@@ -238,14 +242,17 @@ async def delete_sessions_sql(
 
 # 查询单一会话历史sql
 async def search_specific_session_sql(
-    session: AsyncSession = Depends(get_async_db),
-    request: QuerySingleSessionRequest = Body(...)
+    session: AsyncSession,
+    credentials: HTTPAuthorizationCredentials,
+    request: QuerySingleSessionRequest
 ):
     """
     查询单一会话历史的逻辑
     """
-    # 检验token有效性
-    payload = decode_vaild(request.system_token,
+
+    # 提取并校验 token
+    system_token = credentials.credentials  # 直接获取Token
+    payload = decode_vaild(system_token,
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
@@ -361,11 +368,12 @@ async def search_specific_session_sql(
 
 # 查询会话历史sql
 async def search_sessions_sql(
-    session: AsyncSession = Depends(get_async_db),
-    request: SessionsRequest = Body(...)
+    session: AsyncSession ,
+    credentials: HTTPAuthorizationCredentials
 ):
-    # 检验token有效性
-    payload = decode_vaild(request.system_token,
+    # 提取并校验 token
+    system_token = credentials.credentials  # 直接获取Token
+    payload = decode_vaild(system_token,
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
@@ -421,39 +429,6 @@ async def search_sessions_sql(
             sessions=[]
         )
 
-# 插入单一会话内部-用户输入sql
-async def insert_user_input_sql(
-        session: AsyncSession = Depends(get_async_db),
-        request: InsertUserInputSessionRequest = Body(...)
-):
-
-    try:
-        msg = MessageModel(
-            id=str(uuid.uuid4()),
-            conversation_id=request.id,
-            query=request.query,
-            response=request.response,
-            meta_data=request.meta_data,
-            feedback_score=request.feedback_score,
-            feedback_reason=request.feedback_reason,
-            create_time=datetime.now(),
-        )
-        # 添加到数据库会话
-        session.add(msg)
-        # 提交到数据库
-        await session.commit()
-        # 刷新以获取数据库分配的 ID 等字段
-        await session.refresh(msg)
-        return BaseResponse(
-            ok=0,
-            failed=""
-        )
-    except Exception as e:
-        await session.rollback()
-        return BaseResponse(
-            ok=1,
-            failed=str(e)
-        )
 
 # chat路由插入单一会话内部-用户输入sql
 @with_async_session
@@ -487,39 +462,17 @@ async def insert_user_input_chat(
             ok=1,
             failed=str(e)
         )
-# 插入单一会话内部-AI回复sql
-@with_async_session
-async def insert_ai_input_sql(
-        session,
-        msg_id: str,
-        response: str,
-):
-    try:
-        result = await session.execute(select(MessageModel).filter_by(id=msg_id))
-        m = result.scalars().first()
-        if m is not None:
-            if response is not None:
-                m.response = response
-            session.add(m)
-            await session.commit()
-        return BaseResponse(
-            ok=0,
-            failed=""
-        )
-    except Exception as e:
-        await session.rollback()
-        return BaseResponse(
-            ok=1,
-            failed=str(e)
-        )
+
 
 # 新建会话记录sql
 async def add_sessions_sql(
-        session: AsyncSession = Depends(get_async_db),
-        request: AddSessionRequest = Body(...)
+        session: AsyncSession,
+        credentials: HTTPAuthorizationCredentials,
+        request: AddSessionRequest
 ):
-    # 检验token有效性
-    payload = decode_vaild(request.system_token,
+    # 提取并校验 token
+    system_token = credentials.credentials  # 直接获取Token
+    payload = decode_vaild(system_token,
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
@@ -557,11 +510,12 @@ async def add_sessions_sql(
 
 # 返回会话id
 async def get_new_session_id_sql(
-        session: AsyncSession = Depends(get_async_db),
-        request: AddSessionRequest = Body(...)
+        credentials: HTTPAuthorizationCredentials,
+        
 ):
-    # 检验token有效性
-    payload = decode_vaild(request.system_token,
+    # 提取并校验 token
+    system_token = credentials.credentials  # 直接获取Token
+    payload = decode_vaild(system_token,
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
@@ -616,11 +570,13 @@ async def upsert_conversation_sql(session, conversation_id: str, unionid: str, p
 
 
 async def update_session_name_sql(
-        session: AsyncSession = Depends(get_async_db),
-        request: UpdateSessionRequest = Body(...)
+        session: AsyncSession,
+        credentials: HTTPAuthorizationCredentials,
+        request: UpdateSessionRequest
 ):
-    # 检验token有效性
-    payload = decode_vaild(request.system_token,
+    # 提取并校验 token
+    system_token = credentials.credentials  # 直接获取Token
+    payload = decode_vaild(system_token,
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:

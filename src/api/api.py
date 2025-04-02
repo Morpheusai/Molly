@@ -1,4 +1,5 @@
 from fastapi import Depends, Body
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.utils.mysql_db import *
@@ -9,6 +10,9 @@ from .protocols import *
 
 
 from src.demo.insert_guide_demo import insert_guide_demo
+
+security = HTTPBearer()
+
 #用户注册
 async def add_user(
         request: AddUserRequest = None,
@@ -25,63 +29,48 @@ async def query_user_info(
 #删除单一会话
 async def delete_specific_session(
         request: DeleteSessionRequest = Body(...),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
         session: AsyncSession = Depends(get_async_db)
 ):
-    return await delete_specific_session_sql(session,request)
+    return await delete_specific_session_sql(session,credentials,request)
 
 #清空所有会话
 async def delete_sessions(
-        request: DelAllSessionsRequest = Body(...),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
         session: AsyncSession = Depends(get_async_db)
 ):
-   return await delete_sessions_sql(session,request)
+   return await delete_sessions_sql(session,credentials)
 
 #查询单一会话
 async def search_specific_session(
         request: QuerySingleSessionRequest = Body(...),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
         session: AsyncSession = Depends(get_async_db)
 ):
-    return await search_specific_session_sql(session,request)
+    return await search_specific_session_sql(session,credentials,request)
 
 #查询会话历史
 async def search_sessions(
-        request: SessionsRequest = Body(...),
+        # request: SessionsRequest = Body(...),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
         session: AsyncSession = Depends(get_async_db)
 ):
-    return await search_sessions_sql(session,request)
+    return await search_sessions_sql(session,credentials)
 
-
-#插入单一会话内部-用户输入
-async def insert_user_input(
-        request: InsertUserInputSessionRequest = Body(...),
-        session: AsyncSession = Depends(get_async_db)
-):
-
-    return await insert_user_input_sql(session,request)
-
-#后端接口，没有放在路由上
-#插入单一会话内部-AI回复
-@with_async_session
-async def insert_ai_input(
-        session,
-        request: InsertAIInputSessionRequest = None
-              
-):
-    return await insert_ai_input_sql(session,request)
 
 #新建会话记录
 async def add_sessions(
         session: AsyncSession = Depends(get_async_db),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
         request: AddSessionRequest = Body(...)        
 ):
-    return await add_sessions_sql(session,request)
+    return await add_sessions_sql(session,credentials,request)
 
 #返回会话id
 async def get_new_session_id(
-        session: AsyncSession = Depends(get_async_db),
-        request: AddSessionRequest = Body(...)        
+        credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
-    return await get_new_session_id_sql(session,request)
+    return await get_new_session_id_sql(credentials)
 
 
 
@@ -96,9 +85,10 @@ async def upsert_conversation(
 #更改会话名称
 async def update_session_name(
         session: AsyncSession = Depends(get_async_db),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
         request: UpdateSessionRequest = Body(...)        
 ):
-    return await update_session_name_sql(session,request)
+    return await update_session_name_sql(session,credentials,request)
 
 #插入demo示例
 async def insert_demo_conversation(

@@ -3,7 +3,8 @@ import os
 import uuid
 import weblogo
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException,Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from minio.error import S3Error
 from pathlib import Path
 from weblogo import LogoData, LogoOptions, LogoFormat
@@ -13,6 +14,8 @@ from src.config import g_config
 from src.utils.jwt_util import decode_vaild
 from src.utils.log import logger
 from src.utils.minio import minio_client, bucket_weblogo
+
+security = HTTPBearer()
 
 TEMP_DIR = g_config["temp"]["weblogo_peptide_sequence_dir"]
 TEMP_OUTPUT_IMAGE_DIR = g_config["temp"]["weblogo_output_tmp_image_dir"]
@@ -27,15 +30,19 @@ router = APIRouter(tags=["weblogo_generate"])
 
 
 @router.post("/generate_weblogo")
-async def generate_weblogo_endpoint(request: WebLogoRequest):
+async def generate_weblogo_endpoint(
+    request: WebLogoRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+    ):
     """
     接口：
     1. 解析 markdown_content 提取 Peptide Sequence
     2. 生成 WebLogo 并返回 base64 png 格式
     """
     try:
-        # 验证 token
-        payload = decode_vaild(request.system_token,
+        # 提取并校验 token
+        system_token = credentials.credentials  # 直接获取Token
+        payload = decode_vaild(system_token,
                                SECRET_KEY, algorithms=[ALGORITHM])
         unionid = payload.get("sub")
         if not unionid:

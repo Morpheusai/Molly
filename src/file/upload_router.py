@@ -8,7 +8,8 @@ import os
 import uuid
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, File, UploadFile, HTTPException, Body
+from fastapi import APIRouter, File, UploadFile, HTTPException, Body, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from minio.error import S3Error
 from pathlib import Path
 from sqlalchemy import func
@@ -42,6 +43,7 @@ MAX_FILES_PER_CONVERSATION = int(os.getenv("MAX_FILES_PER_CONVERSATION", 5))
 target_desc_url = g_config["url"]["target_desc_url"]
 
 router = APIRouter(tags=["file-upload"])
+security = HTTPBearer()
 
 # Ensure MinIO bucket exists
 if not minio_client.bucket_exists(bucket_molly):
@@ -52,8 +54,8 @@ if not minio_client.bucket_exists(bucket_molly):
 async def upload_attachments(
     files: List[UploadFile] = File(...),
     conversation_id: str = Body(...),
-    system_token: str = Body(..., description="系统token"),
     session_title: str = Body(default="file chat"),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> Dict:
     """Upload multiple files to MinIO concurrently with independent sessions.
 
@@ -68,6 +70,8 @@ async def upload_attachments(
     sem = asyncio.Semaphore(10)
 
     try:
+        # 提取并校验 token
+        system_token = credentials.credentials  # 直接获取Token        
         payload = decode_vaild(system_token, SECRET_KEY,
                                algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")

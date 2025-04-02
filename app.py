@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from fastapi import HTTPException, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import ValidationError
 
 from src.api.api import *
@@ -25,9 +27,11 @@ from src.utils.weblogo_generate import router as weblogo_generate
 
 
 logger.info(
-    f"========================start molly backend==============================")
+    f"========================start neo backend==============================")
 
 app = FastAPI()
+
+security = HTTPBearer()
 
 origins = [
     "*",  # 允许的来源，可以添加多个
@@ -225,6 +229,7 @@ stop_events: Dict[str, asyncio.Event] = {}
 @app.post("/backend/chat_with_files")
 async def backend_chat_with_files(
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_async_db)
 ) -> StreamingResponse:
     """代理聊天接口，支持文件上传信息，流式转发到目标服务器"""
@@ -248,8 +253,9 @@ async def backend_chat_with_files(
     except Exception as e:
         logger.exception("未捕获的异常:")
         raise HTTPException(status_code=500, detail="Internal server error")
-    # 校验 token
-    payload = decode_vaild(user_input.system_token,
+    # 提取并校验 token
+    system_token = credentials.credentials  # 直接获取Token
+    payload = decode_vaild(system_token,
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
@@ -333,11 +339,14 @@ def get_file_content(file_path: str) -> tuple[str, str]:
 
 
 @app.post("/backend/stop")
-async def stop(request: Request):
+async def stop(request: Request,
+               credentials: HTTPAuthorizationCredentials = Depends(security),
+               ):
     body = await request.body()
     try:
+        # 提取并校验 token
+        system_token = credentials.credentials  # 直接获取Token
         data = json.loads(body.decode("utf-8"))
-        system_token = data.get("system_token")
         conversation_id = data.get("conversation_id")
         if not system_token:
             raise HTTPException(
@@ -379,9 +388,6 @@ app.post("/backend/search_specific_session",
 
 app.post("/backend/search_sessions",
          tags=["会话数据"], summary="查询会话历史")(search_sessions)
-
-app.post("/insert_user_input", tags=["消息数据"],
-         summary="插入单一会话内部-用户输入")(insert_user_input)
 
 app.post("/backend/add_sessions",
          tags=["会话数据"], summary="新建会话记录信息")(add_sessions)

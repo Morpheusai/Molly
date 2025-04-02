@@ -1,7 +1,8 @@
 import os
 import re
 
-from fastapi import Body, HTTPException, APIRouter
+from fastapi import Body, HTTPException, APIRouter,Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
 from minio.error import S3Error
 
@@ -18,11 +19,12 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 MINIO_URL_PATTERN = re.compile(r"^minio://([\w-]+)/(.+)$")
 
 router = APIRouter(tags=["file-download"])
-
+security = HTTPBearer()
 
 @router.post("/download")
 async def download_file(
-    request: DownloadFileRequest = Body(...)
+    request: DownloadFileRequest = Body(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> StreamingResponse:
     """Download a file from MinIO after token validation.
 
@@ -34,7 +36,9 @@ async def download_file(
     """
     # 1. **验证 Token 并处理过期情况**
     try:
-        payload = decode_vaild(request.system_token,
+        # 提取并校验 token
+        system_token = credentials.credentials  # 直接获取Token        
+        payload = decode_vaild(system_token,
                                SECRET_KEY, algorithms=[ALGORITHM])
         unionid = payload.get("sub")
         if not unionid:

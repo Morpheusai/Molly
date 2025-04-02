@@ -41,23 +41,17 @@ class QueryUserInfoResponse(BaseModel):
 
 #删除单一会话的请求模型
 class DeleteSessionRequest(BaseModel):
-    system_token:str #系统token
     session_id: str  # 会话 ID  
 
-#查询会话历史请求模型
-class SessionsRequest(BaseModel):
-    # user_id: str     # 微信用户 unionid
-    system_token: str
-
-#清空所有会话请求模型
-class DelAllSessionsRequest(BaseModel):
-    system_token:str #系统token
+# #查询会话历史请求模型
+# class SessionsRequest(BaseModel):
+#     # user_id: str     # 微信用户 unionid
+#     system_token: str
 
 
 
 #查询单一会话请求模型
 class QuerySingleSessionRequest(BaseModel):
-    system_token:str #系统token
     session_id: str  # 会话 ID    
 
 #单条会话信息
@@ -116,23 +110,9 @@ class QuerySessionResponse(BaseModel):
 #     failed: str      # 空表示成功，否则是出错信息
 #     chats: List[ChatItem]  # 聊天记录列表   
 
-#插入单一会话（用户输入）请求模型
-class InsertUserInputSessionRequest(BaseModel):
-    id: str  # 会话ID
-    query: str  # 用户输入
-    response: Optional[str] = None  # 模型回答（可选）
-    meta_data: Optional[Dict[str, Any]] = None  # 元数据（可选）
-    feedback_score: Optional[int] = None  # 用户评分（可选）
-    feedback_reason: Optional[str] = None  # 用户评分理由（可选）
-
-#插入单一会话（用户输入）请求模型
-class InsertAIInputSessionRequest(BaseModel):
-    id: str     # 消息ID
-    response: str       # 模型输入    
           
 #新建会话请求模型
 class AddSessionRequest(BaseModel):
-    system_token:str
     session_title: Optional[str] = "新会话"    # 会话标题  
     chat_type: str = "normal"
 
@@ -146,7 +126,6 @@ class SessionResponse(BaseResponse):
 
 #更改会话名称请求模型    
 class UpdateSessionRequest(BaseModel):
-    system_token:str
     session_id: str  # 会话 ID 
     session_title: Optional[str] = "新会话"    # 会话标题     
 
@@ -163,7 +142,6 @@ class FileGroup(BaseModel):
 class UserInput(BaseModel):
     """User input processed by the FastAPI server and sent to the target server."""
     prompt: str = Field(description="用户输入")
-    system_token: str = Field(description="系统token")
     conversation_id: str = Field(description="会话id")
     file_list: List[FileGroup] = Field(description="传入文件列表", default=[])
     conversation_chat_type: str = Field(description="会话聊天类型", default="normal")
@@ -171,7 +149,6 @@ class UserInput(BaseModel):
 #文件下载请求
 class DownloadFileRequest(BaseModel):
     file_path: str
-    system_token: str
 
 #文件描述请求
 class DescRequest(BaseModel):
@@ -191,4 +168,3 @@ class WebLogoRequest(BaseModel):
     logo_type: str = "svg"  
     color_scheme: str = "auto"  
     logo_title: str = "Sequence Motif Analysis"
-    system_token: str 
