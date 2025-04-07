@@ -76,10 +76,16 @@ async def upload_attachments(
                                algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if unionid is None:
-            raise HTTPException(status_code=401, detail="unionid不存在")
+            return {
+                "ok": 1,
+                "failed": "unionid不存在"
+            }  
     except Exception as e:
         logger.error(f"Token validation failed: {str(e)}")
-        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+        return {
+            "ok": 1,
+            "failed": f"Invalid token: {str(e)}"
+        }      
 
     # 确保 conversation 存在
     try:
@@ -87,8 +93,11 @@ async def upload_attachments(
     except Exception as e:
         logger.error(
             f"Failed to upsert conversation {conversation_id}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to initialize conversation: {str(e)}")
+        return {
+            "ok": 1,
+            "failed": f"Failed to initialize conversation: {str(e)}"
+        }  
+
 
     async def process_file(file: UploadFile):
         async with sem, AsyncSessionLocal() as session:
@@ -169,8 +178,10 @@ async def insert_file_info_to_db(session: AsyncSession, conversation_id: str, fi
         await session.rollback()
         logger.error(
             f"Failed to insert file {file_info['file_name']} into database: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Database insert failed: {str(e)}")
+        return {
+            "ok": 1,
+            "failed": f"Database insert failed: {str(e)}"
+        }      
 
 
 async def check_existing_file(session: AsyncSession, conversation_id: str, file_hash: str) -> Optional[UploadedFile]:
@@ -250,20 +261,19 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
         # 检查同一会话下的上传文件数量
         file_count = await check_file_count(session, conversation_id)
         if file_count >= MAX_FILES_PER_CONVERSATION:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File limit exceeded: Maximum {MAX_FILES_PER_CONVERSATION} files allowed per conversation"
-            )
+            return {
+                "ok": 1,
+                "failed": f"File limit exceeded: Maximum {MAX_FILES_PER_CONVERSATION} files allowed per conversation"
+            }          
 
         file_data = await file.read()
         file_size_mb = len(file_data) / (1024 * 1024)
         # 检查文件大小是否超过限制
         if file_size_mb > MAX_FILE_SIZE_MB:
-            raise HTTPException(
-                status_code=413,  # 413 Payload Too Large
-                detail=f"File size exceeds limit of {MAX_FILE_SIZE_MB} MB"
-            )
-
+            return {
+                "ok": 1,
+                "failed": f"File size exceeds limit of {MAX_FILE_SIZE_MB} MB"
+            }  
         # 计算文件哈希值
         file_hash = await calculate_file_hash(file_data)
 
@@ -324,8 +334,11 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
         logger.error(
             f"MinIO upload failed for file {file.filename}: {str(minio_error)}")
         await insert_file_info_to_db(session, conversation_id, file_info)
-        raise HTTPException(
-            status_code=500, detail=f"MinIO upload failed: {str(minio_error)}")
+        return {
+            "ok": 1,
+            "failed": f"MinIO upload failed: {str(minio_error)}"
+        }      
+    
     except HTTPException:
         raise
     except Exception as e:
@@ -333,9 +346,11 @@ async def upload_attachment(file: UploadFile, conversation_id: str, session: Asy
         logger.error(
             f"Unexpected error processing file {file.filename}: {str(e)}")
         await insert_file_info_to_db(session, conversation_id, file_info)
-        raise HTTPException(
-            status_code=500, detail=f"File processing failed: {str(e)}")
-
+        return {
+            "ok": 1,
+            "failed": f"File processing failed: {str(e)}"
+        }      
+    
     return file_info
 
 

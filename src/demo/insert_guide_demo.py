@@ -89,7 +89,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         return {
             "ok": 0,
             "failed": "",
-            "session_id": new_conversation_id,
+            "conversation_id": new_conversation_id,
             "session_title": "DEMO",
         }
 
@@ -98,7 +98,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         return {
             "ok": 1,
             "failed": str(e),
-            "session_id": new_conversation_id,
+            "conversation_id": new_conversation_id,
             "session_title": None,
             "chats": [],
             "files": []

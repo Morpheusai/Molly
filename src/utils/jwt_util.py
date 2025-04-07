@@ -76,7 +76,7 @@ def decode_vaild(token: str, secret_key: str, algorithms: list = None):
         payload = jwt.decode(token, secret_key, algorithms)
         return payload
     except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": 401, "detail": "用户状态失效"},
-        )
+        return {
+            "ok": 1,
+            "failed": "用户状态失效"
+        }

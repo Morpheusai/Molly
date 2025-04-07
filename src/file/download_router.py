@@ -42,19 +42,27 @@ async def download_file(
                                SECRET_KEY, algorithms=[ALGORITHM])
         unionid = payload.get("sub")
         if not unionid:
-            raise HTTPException(
-                status_code=401, detail="Invalid or missing unionid")
+            return {
+                "ok": 1,
+                "failed": "unionid不存在"
+            }  
 
         # 检查 Token 是否过期
         if "exp" in payload:
             import time
             if payload["exp"] < time.time():
-                raise HTTPException(
-                    status_code=401, detail="Token has expired")
+                return {
+                    "ok": 1,
+                    "failed": "Token has expired"
+                }              
 
     except Exception as e:
         logger.error(f"Token validation failed: {str(e)}")
-        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+        return {
+            "ok": 1,
+            "failed": f"Invalid token: {str(e)}"
+        }     
+    
 
     # 2. **解析 file_path**
     file_path = request.file_path
@@ -62,8 +70,10 @@ async def download_file(
 
     if not match:
         logger.error(f"Invalid file_path format: {file_path}")
-        raise HTTPException(
-            status_code=400, detail="Invalid file path format. Expected 'minio://bucket_name/object_name'.")
+        return {
+            "ok": 1,
+            "failed": "Invalid file path format. Expected 'minio://bucket_name/object_name'."
+        }      
 
     bucket_name, object_name = match.groups()
 
@@ -100,9 +110,15 @@ async def download_file(
     except S3Error as minio_error:
         logger.error(
             f"MinIO download failed for {object_name}: {str(minio_error)}")
-        raise HTTPException(
-            status_code=404, detail=f"File not found: {str(minio_error)}")
+
+        return {
+            "ok": 1,
+            "failed": f"File not found: {str(minio_error)}"
+        }         
     except Exception as e:
         logger.error(f"Unexpected error downloading {file_path}: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Download failed: {str(e)}")
+
+        return {
+            "ok": 1,
+            "failed": f"Download failed: {str(e)}"
+        }    

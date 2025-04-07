@@ -39,11 +39,16 @@ async def display_router(
                                SECRET_KEY, algorithms=[ALGORITHM])
         unionid = payload.get("sub")
         if not unionid:
-            raise HTTPException(
-                status_code=401, detail="Invalid or missing unionid")
+            return {
+                "ok": 1,
+                "failed": "Invalid or missing unionid"
+            }
     except Exception as e:
         logger.error(f"Token validation failed: {str(e)}")
-        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+        return {
+            "ok": 1,
+            "failed": f"Invalid token: {str(e)}"
+        }
 
     # bucket_netmhcpan_results = "netmhcpan-results"
 
@@ -51,8 +56,11 @@ async def display_router(
     file_path = request.file_path
     if not file_path.startswith(f"minio://"):
         logger.error(f"Invalid file_path format: {file_path}")
-        raise HTTPException(
-            status_code=400, detail=f"Invalid file path, expected minio://{bucket_netmhcpan_results}/...")
+        return {
+            "ok": 1,
+            "failed": f"Invalid file path, expected minio://{bucket_netmhcpan_results}/..."
+        }        
+
 
     # 2. 提取 bucket_name 和 object_name
     try:
@@ -63,8 +71,10 @@ async def display_router(
         first_slash_index = path_without_prefix.find("/")
 
         if first_slash_index == -1:
-            raise ValueError(
-                "Invalid file path format: missing bucket name or object name")
+            return {
+                "ok": 1,
+                "failed": "Invalid file path format: missing bucket name or object name"
+            }        
 
         # 提取 bucket_name 和 object_name
         bucket_name = path_without_prefix[:first_slash_index]
@@ -77,9 +87,10 @@ async def display_router(
     except Exception as e:
         logger.error(
             f"Failed to parse file_path: {file_path}, error: {str(e)}")
-        raise HTTPException(
-            status_code=400, detail=f"Failed to parse file path: {str(e)}")
-
+        return {
+            "ok": 1,
+            "failed": f"Failed to parse file path: {str(e)}"
+        }
     # 3. 从 MinIO 一次性读取文件内容
     try:
         response = minio_client.get_object(bucket_name, object_name)
@@ -110,8 +121,10 @@ async def display_router(
                 text_content = file_content.decode("utf-8")
             except UnicodeDecodeError:
                 logger.error(f"Failed to decode file content: {file_path}")
-                raise HTTPException(
-                    status_code=500, detail="Failed to decode file content")
+                return {
+                    "ok": 1,
+                    "failed": "Failed to decode file content"
+                }
                 # 如果 bucket_name 是 esm_result，直接返回整个文件内容
             content_target = text_content
         elif bucket_name == "netmhcstabpan-results":
@@ -126,8 +139,11 @@ async def display_router(
                 [str(item) if item is not None else "" for item in row]) for row in data])
         else:
             # 如果 bucket_name 不是上述两种情况，可以抛出异常或设置默认值
-            raise HTTPException(
-                status_code=400, detail=f"Unsupported bucket name: {bucket_name}")
+            logger.error(f"Unsupported bucket name: {bucket_name}")
+            return {
+                "ok": 1,
+                "failed": f"Unsupported bucket name: {bucket_name}"
+            }
         # 6. 直接返回内容
         return DisplayResponse(
             ok=0,
@@ -138,9 +154,13 @@ async def display_router(
     except S3Error as minio_error:
         logger.error(
             f"MinIO download failed for {object_name}: {str(minio_error)}")
-        raise HTTPException(
-            status_code=404, detail=f"File not found: {str(minio_error)}")
+        return {
+            "ok": 1,
+            "failed": f"File not found: {str(minio_error)}"
+        }
     except Exception as e:
         logger.error(f"Unexpected error downloading {file_path}: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Download failed: {str(e)}")
+        return {
+            "ok": 1,
+            "failed": f"Download failed: {str(e)}"
+        }

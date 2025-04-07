@@ -46,8 +46,11 @@ async def generate_weblogo_endpoint(
                                SECRET_KEY, algorithms=[ALGORITHM])
         unionid = payload.get("sub")
         if not unionid:
-            raise HTTPException(
-                status_code=401, detail="Invalid or missing unionid")
+
+            return {
+                "ok": 1,
+                "failed": "unionid不存在"
+            }          
 
         png_output = generate_weblogo(request.peptide_sequences)
 
@@ -121,7 +124,11 @@ def generate_weblogo(peptide_sequences: list, logo_type: str = 'png', logo_title
         format = LogoFormat(data, options)
 
         if logo_type.lower() != 'png':
-            raise ValueError("当前仅支持 PNG 格式给前端渲染")
+
+            return {
+                "ok": 1,
+                "failed": "当前仅支持 PNG 格式给前端渲染"
+            }               
 
         # 生成 Logo 图像
         if logo_type.lower() == 'png':
@@ -135,7 +142,10 @@ def generate_weblogo(peptide_sequences: list, logo_type: str = 'png', logo_title
         elif logo_type.lower() == 'svg':
             logo = weblogo.svg_formatter(data, format)  # 处理 SVG 格式
         else:
-            raise ValueError(f"不支持的图像格式: {logo_type}")
+            return {
+                "ok": 1,
+                "failed": f"不支持的图像格式: {logo_type}"
+            }             
 
         with open(temp_output_image_path, "wb") as f:
             f.write(logo)

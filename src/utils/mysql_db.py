@@ -112,15 +112,15 @@ async def delete_specific_session_sql(
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="unionid不存在",
-        )
+        return {
+            "ok": 1,
+            "failed": "unionid不存在"
+        }    
     async with session.begin():
         # 检查是否存在指定的会话，并且会话属于当前用户
         result = await session.execute(
             select(ConversationModel)
-            .where(ConversationModel.id == request.session_id)
+            .where(ConversationModel.id == request.conversation_id)
             .where(ConversationModel.user_id == unionid)
         )
         conversation = result.scalar_one_or_none()
@@ -136,19 +136,19 @@ async def delete_specific_session_sql(
         # 删除与会话关联的所有工具
         await session.execute(
             delete(ToolModel)
-            .where(ToolModel.conversation_id == request.session_id)
+            .where(ToolModel.conversation_id == request.conversation_id)
         )
 
         # 删除与会话关联的所有消息
         await session.execute(
             delete(MessageModel)
-            .where(MessageModel.conversation_id == request.session_id)
+            .where(MessageModel.conversation_id == request.conversation_id)
         )
 
         # 删除于会话关联的上传文件信息
         await session.execute(
             delete(UploadedFile)
-            .where(UploadedFile.conversation_id == request.session_id)
+            .where(UploadedFile.conversation_id == request.conversation_id)
         )
 
         # 删除会话
@@ -179,10 +179,10 @@ async def delete_sessions_sql(
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="unionid不存在",
-        )
+        return {
+            "ok": 1,
+            "failed": "unionid不存在"
+        }    
     try:
         async with session.begin():
             # 查询该用户的所有会话 ID
@@ -256,27 +256,27 @@ async def search_specific_session_sql(
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="unionid不存在",
-        )
+        return {
+            "ok": 1,
+            "failed": "unionid不存在"
+        }    
 
     try:
         # 查询Conversation以获取session_title并验证会话存在性和权限
         conversation_query = select(ConversationModel).where(
-            ConversationModel.id == request.session_id)
+            ConversationModel.id == request.conversation_id)
         conversation_result = await session.execute(conversation_query)
         conversation = conversation_result.scalars().first()
 
         if conversation is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Session not found",
-            )
+            return {
+                "ok": 1,
+                "failed": "Session not found"
+            }            
         # 查询会话历史消息
         message_query = (
             select(MessageModel)
-            .where(MessageModel.conversation_id == request.session_id)
+            .where(MessageModel.conversation_id == request.conversation_id)
             .options(selectinload(MessageModel.tools))  # 加载关联工具
             .order_by(desc(MessageModel.create_time))
         )
@@ -286,7 +286,7 @@ async def search_specific_session_sql(
         # 查询会话关联的文件
         file_query = (
             select(UploadedFile)
-            .where(UploadedFile.conversation_id == request.session_id)
+            .where(UploadedFile.conversation_id == request.conversation_id)
             .order_by(desc(UploadedFile.create_time))
         )
         file_result = await session.execute(file_query)
@@ -297,7 +297,7 @@ async def search_specific_session_sql(
             return QuerySessionResponse(
                 ok=1,
                 failed="No data found",
-                session_id=request.session_id,
+                conversation_id=request.conversation_id,
                 session_title="",
                 chats=[],
                 files=[]
@@ -347,7 +347,7 @@ async def search_specific_session_sql(
         return QuerySessionResponse(
             ok=0,
             failed="",
-            session_id=request.session_id,
+            conversation_id=request.conversation_id,
             session_title=conversation.session_title,
             chat_type=conversation.chat_type,
             chats=chats,
@@ -358,7 +358,7 @@ async def search_specific_session_sql(
         return QuerySessionResponse(
             ok=1,
             failed=str(e),
-            session_id=request.session_id,
+            conversation_id=request.conversation_id,
             session_title="",
             chat_type=conversation.chat_type,
             chats=[],
@@ -377,10 +377,10 @@ async def search_sessions_sql(
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="unionid不存在",
-        )
+        return {
+            "ok": 1,
+            "failed": "unionid不存在"
+        }       
     # 查询会话列表的逻辑
     try:
         # 查询该用户的所有会话记录
@@ -410,7 +410,7 @@ async def search_sessions_sql(
             formatted_create_time = record.create_time.strftime(
                 "%Y-%m-%d %H:%M:%S")
             sessions.append(SessionItem(
-                session_id=record.id,
+                conversation_id=record.id,
                 session_title=record.session_title,
                 updata_time=formatted_update_time,
                 create_time=formatted_create_time,
@@ -476,10 +476,10 @@ async def add_sessions_sql(
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="unionid不存在",
-        )
+        return {
+            "ok": 1,
+            "failed": "unionid不存在"
+        }  
     try:
         msg = ConversationModel(
             id=str(uuid.uuid4()),
@@ -519,10 +519,10 @@ async def get_new_session_id_sql(
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="unionid不存在",
-        )
+        return {
+            "ok": 1,
+            "failed": "unionid不存在"
+        }  
     try:
         id = str(uuid.uuid4())
         return SessionResponse(
@@ -563,11 +563,11 @@ async def upsert_conversation_sql(session, conversation_id: str, unionid: str, p
     except Exception as e:
         # 捕获异常并回滚事务
         await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"数据库操作失败: {str(e)}",
-        )
 
+        return {
+            "ok": 1,
+            "failed": f"数据库操作失败: {str(e)}"
+        }  
 
 async def update_session_name_sql(
         session: AsyncSession,
@@ -580,15 +580,15 @@ async def update_session_name_sql(
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="unionid不存在",
-        )
+        return {
+            "ok": 1,
+            "failed": "unionid不存在"
+        }  
     try:
         # 检查会话是否存在且属于当前用户
         result = await session.execute(
             select(ConversationModel)
-            .where(ConversationModel.id == request.session_id)
+            .where(ConversationModel.id == request.conversation_id)
             .where(ConversationModel.user_id == unionid)
         )
         conversation = result.scalar_one_or_none()

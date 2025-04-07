@@ -41,7 +41,7 @@ class QueryUserInfoResponse(BaseModel):
 
 #删除单一会话的请求模型
 class DeleteSessionRequest(BaseModel):
-    session_id: str  # 会话 ID  
+    conversation_id: str  # 会话 ID  
 
 # #查询会话历史请求模型
 # class SessionsRequest(BaseModel):
@@ -52,11 +52,11 @@ class DeleteSessionRequest(BaseModel):
 
 #查询单一会话请求模型
 class QuerySingleSessionRequest(BaseModel):
-    session_id: str  # 会话 ID    
+    conversation_id: str  # 会话 ID    
 
 #单条会话信息
 class SessionItem(BaseModel):
-    session_id: str  # 会话 ID
+    conversation_id: str  # 会话 ID
     session_title: str  # 会话标题
     updata_time: str   # 更新时间
     create_time: str  # 创建时间 
@@ -97,7 +97,7 @@ class FileItem(BaseModel):
 class QuerySessionResponse(BaseModel):
     ok: int
     failed: str
-    session_id: str
+    conversation_id: str
     session_title: str
     chat_type:str
     chats: Optional[List[ChatItemWithTools]] = None  # 可以是 None 或 List[ChatItemWithTools]
@@ -105,7 +105,7 @@ class QuerySessionResponse(BaseModel):
 
 # 单一会话的响应模型   
 # class QuerySessionResponse(BaseModel):
-#     session_id: str  # 会话 ID
+#     conversation_id: str  # 会话 ID
 #     ok: int          # 0 表示成功，非 0 表示失败
 #     failed: str      # 空表示成功，否则是出错信息
 #     chats: List[ChatItem]  # 聊天记录列表   
@@ -126,7 +126,7 @@ class SessionResponse(BaseResponse):
 
 #更改会话名称请求模型    
 class UpdateSessionRequest(BaseModel):
-    session_id: str  # 会话 ID 
+    conversation_id: str  # 会话 ID 
     session_title: Optional[str] = "新会话"    # 会话标题     
 
 class FileInfo(BaseModel):

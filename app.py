@@ -80,15 +80,18 @@ async def wechat_callback(code: str) -> Dict[str, Any]:
         response = await client.get(token_url)
         token_data = response.json()
         if "errcode" in token_data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"WeChat API Error: {token_data.get('errmsg', 'Unknown error')}"
-            )
+            return {
+                "ok": "1",
+                "failed": f"微信API错误: {token_data.get('errmsg', '未知错误')}"
+            }
 
     # 获取unionid
     unionid = token_data.get("unionid")
     if not unionid:
-        raise ValueError("未获取到unionid")
+        return {
+            "ok": "1",
+            "failed": "未获取到unionid"
+        }
 
     # 2. 使用 access_token 获取用户信息
     user_info_url = f"https://api.weixin.qq.com/sns/userinfo?access_token={token_data['access_token']}&openid={token_data['openid']}"
@@ -97,8 +100,10 @@ async def wechat_callback(code: str) -> Dict[str, Any]:
         user_info = response.json()
 
     if "errcode" in user_info:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=user_info["errmsg"])
+        return {
+            "ok": "1",
+            "failed": user_info["errmsg"]
+        }
 
     # 判断用户表是否已经存在记录
     user = await search_unionid_sql(unionid=unionid)
@@ -127,13 +132,16 @@ async def wechat_callback(code: str) -> Dict[str, Any]:
             await insert_demo_conversation(user_info.get("unionid"))
         except Exception as e:
             logger.error(f"插入示例对话失败: {e}", exc_info=True)
-            return {"error": "插入示例对话失败"}
+            return {
+                "ok":"1",
+                "failed": "插入示例对话失败"
+                }
     # 生成自身系统的 JWT Token,并存入user_token表中
     system_token = await create_system_token(unionid=unionid, wechat_access_token=token_data['access_token'])
 
     # 返回成功响应
     return {
-        "ok": "0",
+        "ok": 0,
         "failed": "",
         "system_token": system_token,
         "unionid": user_info.get("unionid"),
@@ -160,15 +168,18 @@ async def m_wechat_callback(code: str) -> Dict[str, Any]:
         response = await client.get(token_url)
         token_data = response.json()
         if "errcode" in token_data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"WeChat API Error: {token_data.get('errmsg', 'Unknown error')}"
-            )
+            return {
+                "ok": "1",
+                "failed": f"微信API错误: {token_data.get('errmsg', '未知错误')}"
+            }
 
     # 获取unionid
     unionid = token_data.get("unionid")
     if not unionid:
-        raise ValueError("未获取到unionid")
+        return {
+            "ok": "1",
+            "failed": "未获取到unionid"
+        }
 
     # 2. 使用 access_token 获取用户信息
     user_info_url = f"https://api.weixin.qq.com/sns/userinfo?access_token={token_data['access_token']}&openid={token_data['openid']}"
@@ -177,8 +188,10 @@ async def m_wechat_callback(code: str) -> Dict[str, Any]:
         user_info = response.json()
 
     if "errcode" in user_info:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=user_info["errmsg"])
+        return {
+            "ok": "1",
+            "failed": user_info["errmsg"]
+        }
 
     # 判断用户表是否已经存在记录
     user = await search_unionid_sql(unionid=unionid)
@@ -213,7 +226,7 @@ async def m_wechat_callback(code: str) -> Dict[str, Any]:
 
     # 返回成功响应
     return {
-        "ok": "0",
+        "ok": 0,
         "failed": "",
         "system_token": system_token,
         "unionid": user_info.get("unionid"),
@@ -233,6 +246,18 @@ async def backend_chat_with_files(
     db: AsyncSession = Depends(get_async_db)
 ) -> StreamingResponse:
     """代理聊天接口，支持文件上传信息，流式转发到目标服务器"""
+
+    async def generate_error_response(error_msg: str):
+        """生成错误响应的辅助函数"""
+        error_data = json.dumps({
+            "type": "error",
+            "content": error_msg
+        })
+        return StreamingResponse(
+            iter([f"data: {error_data}\n\n"]),
+            media_type="text/event-stream"
+        )
+
     try:
         raw_body = await request.body()
         logger.info(f"Raw request body: {raw_body.decode('utf-8')}")
@@ -246,20 +271,20 @@ async def backend_chat_with_files(
 
     except json.JSONDecodeError as e:
         logger.error(f"JSON解析失败: {str(e)}")
-        raise HTTPException(status_code=422, detail="Invalid JSON format")
+        return await generate_error_response("Invalid JSON format")
     except ValidationError as e:
         logger.error(f"模型验证失败: {e.errors()}")
-        raise HTTPException(status_code=422, detail=e.errors())
+        return await generate_error_response(str(e.errors()))
     except Exception as e:
         logger.exception("未捕获的异常:")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        return await generate_error_response(str(e.errors()))
     # 提取并校验 token
     system_token = credentials.credentials  # 直接获取Token
     payload = decode_vaild(system_token,
                            SECRET_KEY, algorithms=[ALGORITHM])
     unionid: str = payload.get("sub")
     if unionid is None:
-        raise HTTPException(status_code=401, detail="unionid不存在")
+        return await generate_error_response("unionid不存在")
     conversation_id = user_input.conversation_id
     prompt = user_input.prompt
 
@@ -339,36 +364,69 @@ def get_file_content(file_path: str) -> tuple[str, str]:
 
 
 @app.post("/backend/stop")
-async def stop(request: Request,
-               credentials: HTTPAuthorizationCredentials = Depends(security),
-               ):
+async def stop(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
     body = await request.body()
     try:
-        # 提取并校验 token
-        system_token = credentials.credentials  # 直接获取Token
+        # 提取并校验基础参数
+        system_token = credentials.credentials
         data = json.loads(body.decode("utf-8"))
         conversation_id = data.get("conversation_id")
-        if not system_token:
-            raise HTTPException(
-                status_code=422, detail="Missing 'system_token' field")
-        if not conversation_id:
-            raise HTTPException(
-                status_code=422, detail="Missing 'conversation_id' field")
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=422, detail="Invalid JSON format")
 
-    # 检验token有效性
-    payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
-    unionid: str = payload.get("sub")
-    if unionid is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="unionid不存在",
+        # 参数校验
+        if not system_token:
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "ok": 1,
+                    "failed": "Missing 'system_token' field"
+                }
+            )
+        if not conversation_id:
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "ok": 1,
+                    "failed": "Missing 'conversation_id' field"
+                }
+            )
+        # 校验token有效性
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if unionid is None:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "ok": 1,
+                    "failed": "unionid不存在"
+                }
+            )
+        # 设置停止事件
+        if conversation_id in stop_events:
+            stop_events[conversation_id].set()
+        # 成功响应
+        return {
+            "ok": 0,
+            "failed": ""
+        }
+    except json.JSONDecodeError:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "ok": 1,
+                "failed": "Invalid JSON format"
+            }
         )
-    # 设置停止事件
-    if conversation_id in stop_events:
-        stop_events[conversation_id].set()
-    return {"status": "200"}
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "ok": 1,
+                "failed": f"Internal server error: {str(e)}"
+            }
+        )
 
 app.include_router(upload_router, prefix="/backend")
 app.include_router(download_router, prefix="/backend")
