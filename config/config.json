@@ -7,6 +7,7 @@
     "url":{
         "target_stream_url":"http://52.74.25.27:60718/stream",
         "target_demo_stream_url":"http://52.74.25.27:60718/demo_stream",
+        "target_patient_case_mrna_stream_url":"http://52.74.25.27:60718/patient_case_mrna_stream",
         "target_desc_url":"http://52.74.25.27:60718/description"
     },
     "temp":{
