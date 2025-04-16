@@ -127,18 +127,27 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                                     current_response or "") + content
 
                             elif current_response is not None and flag_i == flag_j:
+                                print(".........")
+                                print(current_response)
                                 tool_result_analysis_list.append(
                                     current_response)
                                 current_response = None
                                 content = data.get("content", "")
+                                print(".........")
+                                print(content)
                                 current_response = (
                                     current_response or "") + content
+                                print(".........")
+                                print(current_response)
                             # 解决开头token丢失问题
                             elif current_response is None and flag_i == flag_j:
                                 content = data.get("content", "")
+                                print("111111")
+                                print(content)
                                 current_response = (
                                     current_response or "") + content
-
+                                print("111111")                                
+                                print(current_response)
                             elif current_response is None and flag_i != flag_j:
                                 while flag_i < flag_j:
                                     flag_i += 1
@@ -150,8 +159,9 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                     # 记录错误信息和出错的内容
                     logger.error(f"JSONDecodeError encountered: {e}")
                     logger.error(f"Failed to parse chunk: {chunk[5:].strip()}")
-            if current_response is not None:
-                tool_result_analysis_list.append(current_response)
+        if current_response is not None:
+            tool_result_analysis_list.append(current_response)
                 # tool_result_analysis_list+=current_response
+
     # 处理消息
     await process_messages(msg_id, conversation_id, ai_messages, tool_messages, tool_result_analysis_list, msg_response)

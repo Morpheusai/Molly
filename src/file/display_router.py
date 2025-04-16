@@ -137,6 +137,17 @@ async def display_router(
                 data.append(row)
             content_target = "\n".join(["\t".join(
                 [str(item) if item is not None else "" for item in row]) for row in data])
+        elif bucket_name == "molly":
+            try:
+                text_content = file_content.decode("utf-8")
+            except UnicodeDecodeError:
+                logger.error(f"Failed to decode file content: {file_path}")
+                return {
+                    "ok": 1,
+                    "failed": "Failed to decode file content"
+                }
+                # 如果 bucket_name 是 esm_result，直接返回整个文件内容
+            content_target = text_content            
         else:
             # 如果 bucket_name 不是上述两种情况，可以抛出异常或设置默认值
             logger.error(f"Unsupported bucket name: {bucket_name}")
@@ -144,6 +155,7 @@ async def display_router(
                 "ok": 1,
                 "failed": f"Unsupported bucket name: {bucket_name}"
             }
+        
         # 6. 直接返回内容
         return DisplayResponse(
             ok=0,
