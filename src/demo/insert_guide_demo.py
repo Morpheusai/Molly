@@ -135,22 +135,39 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         for message in patient_messages:
             session.add(message)
 
-        patient_uploaded_file = UploadedFile(
+        patient_uploaded_file_one = UploadedFile(
             id=str(uuid.uuid4()),
             conversation_id=patient_conversation_id,
-            file_name="testSeq.fsa",
-            file_path="minio://molly/6b5a0a9b-4dc3-420d-b53d-a4ca375c51d1_testSeq.fsa",
-            file_desc="mRNA疫苗序列分析",
+            file_name="PancreaticCase.txt",
+            file_path="minio://molly/cc51859d-c60f-4a82-aa03-3883060a2d7a_PancreaticCase.txt",
+            file_desc="胰腺癌病例分析",
             file_type="application/octet-stream",
             file_size=411,
-            file_hash="ae840fb19516a28418991cf7f58f665b4fef79ba683f0ae9a2425197124484dd",
+            file_hash="7e9cb7c2a7c6446166f0e16ad64965b001fdae1437c7ea8353a6d02bdae7b3b8",
+            file_status=True,
+            file_origin=0,
+            create_time=datetime.strptime(
+                "2025-03-07 14:30:10", "%Y-%m-%d %H:%M:%S")
+
+        )
+
+        patient_uploaded_file_two = UploadedFile(
+            id=str(uuid.uuid4()),
+            conversation_id=patient_conversation_id,
+            file_name="PancreaticSeq.fsa",
+            file_path="minio://molly/e455e138-2819-4e9f-b714-f9a20f1d2604_PancreaticSeq.fsa",
+            file_desc="胰腺蛋白序列分析",
+            file_type="application/octet-stream",
+            file_size=411,
+            file_hash="d6c3050ff6dc92b65a36ba7c755cdaee2aad67da4a74fcad7d34ca49e0063b58",
             file_status=True,
             file_origin=0,
             create_time=datetime.strptime(
                 "2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
 
         )
-        session.add(patient_uploaded_file)
+
+        session.add_all([patient_uploaded_file_two,patient_uploaded_file_one])
 
 
 
