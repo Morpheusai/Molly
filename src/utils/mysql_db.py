@@ -679,41 +679,71 @@ async def process_messages(
     for index, tool_msg in enumerate(tool_messages):
         # 解析 content 字段中的 JSON 字符串
         content_dict = json.loads(tool_msg['content']['content'])
-        if 'url' in content_dict:
-            # 原始字符串
-            url = content_dict['url']
-            tool_llm_content = content_dict['content']
-            # 提取 minio:// 和 / 之间的值
-            prefix = "minio://"
-            start_index = len(prefix)  # 跳过 minio://
-            end_index = url.find("/", start_index)  # 找到第一个 / 的位置
-            # 提取目标值
-            target_value = url[start_index:end_index]
-
+        url_field = content_dict.get("url", None)
+        tool_llm_content = content_dict.get('content', '')
+        # if 'url' in content_dict:
+        #     # 原始字符串
+        #     url = content_dict['url']
+        #     tool_llm_content = content_dict['content']
+        #     # 提取 minio:// 和 / 之间的值
+        #     prefix = "minio://"
+        #     start_index = len(prefix)  # 跳过 minio://
+        #     end_index = url.find("/", start_index)  # 找到第一个 / 的位置
+        #     # 提取目标值
+        #     target_value = url[start_index:end_index]
+        if isinstance(url_field, str) and url_field.startswith("minio://"):
+            bucket_name = url_field[len("minio://"):].split("/", 1)[0]
             # 判断是否等于 netmhcpan-results
-            if target_value == "netmhcpan-results":
+            if bucket_name == "netmhcpan-results":
                 tool_files.append(
                     ToolFileModel(
                         id=str(uuid.uuid4()),
                         tool_id="acfe6b85-f651-11ef-a368-00163e1ab54a",
-                        file_url=url,
+                        file_url=url_field,
                         tool_llm_content=tool_llm_content
                     )
                 )
             else:
                 pass
 
-            if target_value == "esm-results":
+            if bucket_name == "esm-results":
                 tool_files.append(
                     ToolFileModel(
                         id=str(uuid.uuid4()),
                         tool_id="bcfe6b85-f651-11ef-a368-00174e1ab54a",
-                        file_url=url,
+                        file_url=url_field,
                         tool_llm_content=tool_llm_content
                     )
                 )
             else:
                 pass
+        elif isinstance(url_field, dict):
+            for _, single_url in url_field.items():
+                if isinstance(single_url, str) and single_url.startswith("minio://"):
+                    bucket_name = single_url[len("minio://"):].split("/", 1)[0]
+                    if bucket_name == "netmhcpan-results":
+                        tool_files.append(
+                            ToolFileModel(
+                                id=str(uuid.uuid4()),
+                                tool_id="acfe6b85-f651-11ef-a368-00163e1ab54a",
+                                file_url=url_field,
+                                tool_llm_content=tool_llm_content
+                            )
+                        )
+                    else:
+                        pass
+
+                    if bucket_name == "esm-results":
+                        tool_files.append(
+                            ToolFileModel(
+                                id=str(uuid.uuid4()),
+                                tool_id="bcfe6b85-f651-11ef-a368-00174e1ab54a",
+                                file_url=url_field,
+                                tool_llm_content=tool_llm_content
+                            )
+                        )
+                    else:
+                        pass
 
         content = tool_msg.get("content", {})
         tool_call_id = content.get("tool_call_id")
