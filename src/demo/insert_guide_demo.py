@@ -48,11 +48,22 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
                 "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
         )
 
-        session.add_all([pmhc_conversation, patient_conversation]) 
+        #neo_antigen_research会话
+        neo_antigen_conversation_id = str(uuid.uuid4())
+        neo_antigen_conversation = ConversationModel(
+            id=neo_antigen_conversation_id,
+            user_id=user_id,
+            session_title="患者个体化antigen筛选设计助手",
+            chat_type="neo_antigen",  # config,
+            create_time=datetime.strptime(
+                "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
+        )        
+
+        session.add_all([pmhc_conversation, patient_conversation,neo_antigen_conversation]) 
 
 
 
-        #pmhc_affinity_prediction会话相关信息插入
+    #pmhc_affinity_prediction会话相关信息插入
         pmhc_response_text = \
             """
 🌟 **欢迎来到个性化疫苗 AI 预测助手！** 🌟
@@ -98,7 +109,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         )
         session.add(pmhc_uploaded_file)
 
-    #patient_case_mrna_research会话相关信息插入
+#patient_case_mrna_research会话相关信息插入
         patient_response_text = \
             """
 🌟 欢迎来到患者个体化mRNA疫苗设计助手！ 🌟
@@ -113,6 +124,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
 
 📥 我们提供了一个临床病例数据及其基因测序文件，您可以选择使用。
             """
+
 
         patient_messages = [
             MessageModel(
@@ -162,7 +174,54 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
 
         session.add_all([patient_uploaded_file_two,patient_uploaded_file_one])
 
+#neo_antigen_research会话相关信息插入
+        neo_antigen_response_text = \
+"""
+🌟 欢迎来到个体化neo-antigen筛选设计助手！ 🌟
+我们专注于为肿瘤患者定制高效、安全的mRNA疫苗方案，通过整合患者特异性突变数据与多维度AI预测工具，筛选高免疫原性新抗原（neo-antigen），助力精准免疫治疗。  
+📥 输入信息要求
+请确保提供以下数据（肽段序列为必填）：
+    🧬 肽段序列数据
+        包含突变位点的肽段（如FAKEA123T，需明确突变位置）。
+        （若无此数据，将无法继续，请立即补充！）
+    🩺 MHC分型数据（可选）
+        默认使用 HLA-A*02:01，若需其他分型请明确提供。
+    🔬 TCR序列数据（可选）
+        若需分析pMHC-TCR相互作用，请至少提供 CDR3区域（A3/B3序列）。
+⚙️ 工具与流程
+    📌 可用工具集
+        蛋白切割：NetChop
+        抗原递呈：NetCTLpan
+        pMHC结合预测：NetMHCPan, TransPHLA, BigMHC_EL, ImmuneApp_PP
+        免疫原性预测：BigMHC_IM, PRIME, ImmuneApp_IM
+        TCR相互作用：pMTnet, PISTE, NetTCR（需CDR3数据）
+        结构建模：UniPMT
+    🔄 默认工作流 NeoAntigenSelection
+        肽段切割 → 2. pMHC亲和力筛选 → 3. 免疫原性评估 → 4. TCR相互作用预测（若有数据）
+        （若无高评分候选，流程将提前终止并反馈原因）    
+📌 操作指引
+    上传数据：
+        上传文件（如.fasta）。
+        补充MHC/TCR数据（非必需但建议）。
+    启动分析：
+        默认调用 NeoAntigenSelection工作流，或根据需求定制工具组合。
+    获取结果：
+        候选肽段列表
+        """
 
+        patient_messages = [
+            MessageModel(
+                # "04abe03e-92d0-41d1-afc6-25de0b861e6b",
+                id=str(uuid.uuid4()),
+                conversation_id=neo_antigen_conversation_id,
+                query="",
+                response=neo_antigen_response_text,
+                create_time=datetime.strptime(
+                    "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
+            ),
+        ]
+        for message in patient_messages:
+            session.add(message)
 
         # 提交事务
         await session.commit()

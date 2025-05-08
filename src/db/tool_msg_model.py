@@ -17,7 +17,7 @@ class ToolModel(Base):
     conversation_id = Column(CHAR(36), ForeignKey(
         'conversation.id'), comment='会话ID')
 
-    tool_id = Column(String(128), comment='工具id')
+    tool_id = Column(String(128), comment='工具call_id')
 
     tool_name = Column(String(128), comment='工具名称')
 

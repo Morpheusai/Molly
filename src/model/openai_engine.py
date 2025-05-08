@@ -18,12 +18,13 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
     """
     if user_input.conversation_chat_type == "normal":
         # 目标服务器地址
-        target_url = g_config["url"]["target_stream_url"]
+        target_url = g_config["url"]["target_mRNA_research_stream_url"]
     elif user_input.conversation_chat_type == "pmhc_affinity_prediction":
-        target_url = g_config["url"]["target_demo_stream_url"]
+        target_url = g_config["url"]["target_pmhc_affinity_prediction_stream_url"]
     elif user_input.conversation_chat_type == "patient_case_mrna":
-        target_url = g_config["url"]["target_patient_case_mrna_stream_url"]        
-    print(target_url)
+        target_url = g_config["url"]["target_patient_case_mrna_stream_url"]     
+    elif user_input.conversation_chat_type == "neo_antigen":
+        target_url = g_config["url"]["target_neo_antigen_stream_stream_url"]              
     # 构造请求参数
     json_data = user_input.dict()
 
@@ -127,27 +128,17 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                                     current_response or "") + content
 
                             elif current_response is not None and flag_i == flag_j:
-                                print(".........")
-                                print(current_response)
                                 tool_result_analysis_list.append(
                                     current_response)
                                 current_response = None
                                 content = data.get("content", "")
-                                print(".........")
-                                print(content)
                                 current_response = (
                                     current_response or "") + content
-                                print(".........")
-                                print(current_response)
                             # 解决开头token丢失问题
                             elif current_response is None and flag_i == flag_j:
                                 content = data.get("content", "")
-                                print("111111")
-                                print(content)
                                 current_response = (
                                     current_response or "") + content
-                                print("111111")                                
-                                print(current_response)
                             elif current_response is None and flag_i != flag_j:
                                 while flag_i < flag_j:
                                     flag_i += 1
