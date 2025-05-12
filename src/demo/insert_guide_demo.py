@@ -179,34 +179,52 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
 """
 🌟 欢迎来到个体化neo-antigen筛选设计助手！ 🌟
 我们专注于为肿瘤患者定制高效、安全的mRNA疫苗方案，通过整合患者特异性突变数据与多维度AI预测工具，筛选高免疫原性新抗原（neo-antigen），助力精准免疫治疗。  
-📥 输入信息要求
-请确保提供以下数据（肽段序列为必填）：
-    🧬 肽段序列数据
-        包含突变位点的肽段（如FAKEA123T，需明确突变位置）。
-        （若无此数据，将无法继续，请立即补充！）
-    🩺 MHC分型数据（可选）
-        默认使用 HLA-A*02:01，若需其他分型请明确提供。
-    🔬 TCR序列数据（可选）
-        若需分析pMHC-TCR相互作用，请至少提供 CDR3区域（A3/B3序列）。
-⚙️ 工具与流程
-    📌 可用工具集
-        蛋白切割：NetChop
-        抗原递呈：NetCTLpan
-        pMHC结合预测：NetMHCPan, TransPHLA, BigMHC_EL, ImmuneApp_PP
-        免疫原性预测：BigMHC_IM, PRIME, ImmuneApp_IM
-        TCR相互作用：pMTnet, PISTE, NetTCR（需CDR3数据）
-        结构建模：UniPMT
-    🔄 默认工作流 NeoAntigenSelection
-        肽段切割 → 2. pMHC亲和力筛选 → 3. 免疫原性评估 → 4. TCR相互作用预测（若有数据）
-        （若无高评分候选，流程将提前终止并反馈原因）    
-📌 操作指引
-    上传数据：
-        上传文件（如.fasta）。
-        补充MHC/TCR数据（非必需但建议）。
-    启动分析：
-        默认调用 NeoAntigenSelection工作流，或根据需求定制工具组合。
-    获取结果：
-        候选肽段列表
+### 📥 输入信息要求
+请确保提供以下数据（**肽段序列为必填**）：
+
+#### 🧬 肽段序列数据
+- 包含突变位点的肽段（例如：`FAKEA123T`，需明确突变位置）
+- *若无此数据，将无法继续，请立即补充！*
+
+#### 🩺 MHC分型数据（可选）
+- 默认使用 `HLA-A*02:01`
+- 若需其他分型请明确提供（例如：`HLA-B*07:02`）
+
+#### 🔬 TCR序列数据（可选）
+- 若需分析 pMHC-TCR 相互作用：
+  - 至少提供 CDR3 区域（`A3`/`B3` 序列）
+  - 示例格式：`CASSLGQGNQPQHF`
+### ⚙️ 工具与流程
+#### 📌 可用工具集
+- **蛋白切割**  
+  `NetChop`  
+- **抗原递呈**  
+  `NetCTLpan`  
+- **pMHC结合预测**  
+  `NetMHCPan`, `TransPHLA`, `BigMHC_EL`, `ImmuneApp_PP`  
+- **免疫原性预测**  
+  `BigMHC_IM`, `PRIME`, `ImmuneApp_IM`  
+- **TCR相互作用**  
+  `pMTnet`, `PISTE`, `NetTCR`（需CDR3数据）  
+- **结构建模**  
+  `UniPMT`  
+
+#### 🔄 默认工作流 `NeoAntigenSelection`
+1. 肽段切割  
+2. pMHC亲和力筛选  
+3. 免疫原性评估  
+4. TCR相互作用预测（若有数据）  
+   *若无高评分候选，流程将提前终止并反馈原因*  
+
+### 📌 操作指引
+1. **上传数据**  
+   - 上传文件（如`.fasta`）  
+   - 补充MHC/TCR数据（非必需但建议）  
+2. **启动分析**  
+   - 默认调用 `NeoAntigenSelection` 工作流  
+   - 或根据需求定制工具组合  
+3. **获取结果**  
+   - 候选肽段列表  
         """
 
         patient_messages = [
