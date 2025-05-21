@@ -18,6 +18,7 @@ from src.db.uploadfiles_model import UploadedFile
 from src.file.download_router import router as download_router
 from src.file.display_router import router as display_router
 from src.file.upload_router import router as upload_router
+from src.file.migrate import router as files_migrate
 from src.file.upload_router import minio_client
 from src.model.openai_engine import proxy_stream_generator
 from src.utils import logger
@@ -432,6 +433,8 @@ app.include_router(upload_router, prefix="/backend")
 app.include_router(download_router, prefix="/backend")
 app.include_router(display_router, prefix="/backend")
 app.include_router(weblogo_generate, prefix="/backend")
+app.include_router(files_migrate, prefix="/backend")
+
 
 app.post("/query_user_info", tags=["用户数据"], summary="查询用户信息")(query_user_info)
 

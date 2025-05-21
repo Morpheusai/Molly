@@ -97,5 +97,9 @@ async def insert_demo_conversation(
     return await insert_guide_demo(user_id)
 
 
-
-
+# 使用 update 操作更新uploadfiles的file_type字段值
+async def update_uploadfiles_file_type(
+        file_paths: list[str],      
+        conversation_id: str,
+):
+        return await update_uploadfiles_file_type_sql(file_paths,conversation_id)

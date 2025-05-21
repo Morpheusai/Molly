@@ -102,6 +102,7 @@ class QuerySessionResponse(BaseModel):
     chat_type:str
     chats: Optional[List[ChatItemWithTools]] = None  # 可以是 None 或 List[ChatItemWithTools]
     files: Optional[List[FileItem]] = None  # 可以是 None 或 List[FileItem]
+    neo_files: Optional[List[FileItem]] = None
 
 # 单一会话的响应模型   
 # class QuerySessionResponse(BaseModel):
@@ -168,3 +169,10 @@ class WebLogoRequest(BaseModel):
     logo_type: str = "svg"  
     color_scheme: str = "auto"  
     logo_title: str = "Sequence Motif Analysis"
+
+#neo文件迁移到普通文件请求
+class MigrateFileRequest(BaseModel):
+    file_paths: List[str]
+    conversation_id: str
+
+  

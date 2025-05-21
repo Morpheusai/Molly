@@ -31,6 +31,9 @@ async def display_router(
     Returns:
         str: The file content as a string.
     """
+    # 初始化 content_target
+    content_target = ""  # 默认值
+
     # 1. 验证 token
     try:
         # 提取并校验 token
@@ -140,6 +143,8 @@ async def display_router(
         elif bucket_name == "molly":
             try:
                 text_content = file_content.decode("utf-8")
+
+                
             except UnicodeDecodeError:
                 logger.error(f"Failed to decode file content: {file_path}")
                 return {
@@ -147,7 +152,17 @@ async def display_router(
                     "failed": "Failed to decode file content"
                 }
                 # 如果 bucket_name 是 esm_result，直接返回整个文件内容
-            content_target = text_content            
+            content_target = text_content   
+        elif bucket_name == "extract-peptide-results":
+            try:
+                text_content = file_content.decode("utf-8")
+            except UnicodeDecodeError:
+                logger.error(f"Failed to decode file content: {file_path}")
+                return {
+                    "ok": 1,
+                    "failed": "Failed to decode file content"
+                }
+            content_target = text_content
         else:
             # 如果 bucket_name 不是上述两种情况，可以抛出异常或设置默认值
             logger.error(f"Unsupported bucket name: {bucket_name}")

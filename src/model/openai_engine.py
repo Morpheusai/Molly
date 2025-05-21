@@ -43,7 +43,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
     content_dict = {}
     content = ""
     chunk_queue = deque()
-    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=300.0)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=1800.0)) as client:
         try:
             async with client.stream(
                 "POST",

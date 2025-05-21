@@ -12,7 +12,7 @@ from fastapi import (
     status
 )
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy import delete, desc
+from sqlalchemy import delete, desc, update
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -283,24 +283,40 @@ async def search_specific_session_sql(
         message_result = await session.execute(message_query)
         message_data = message_result.scalars().unique().all()
 
-        # 查询会话关联的文件
+
+        # 查询会话关联的文件（排除 neo_default_file）
         file_query = (
             select(UploadedFile)
-            .where(UploadedFile.conversation_id == request.conversation_id)
-            .order_by(desc(UploadedFile.create_time))
-        )
+            .where(
+                UploadedFile.conversation_id == request.conversation_id,
+                UploadedFile.file_type != "neo_default_file"  # 排除 neo_default_file
+            )
+            .order_by(desc(UploadedFile.create_time)))
         file_result = await session.execute(file_query)
         file_data = file_result.scalars().unique().all()
 
+        # 单独查询 neo_default_file 类型的文件
+        neo_file_query = (
+            select(UploadedFile)
+            .where(
+                UploadedFile.conversation_id == request.conversation_id,
+                UploadedFile.file_type == "neo_default_file"  # 仅查询 neo_default_file
+            )
+            .order_by(desc(UploadedFile.create_time)))
+        neo_file_result = await session.execute(neo_file_query)
+        neo_file_data = neo_file_result.scalars().unique().all()        
+
+
         # 如果没有消息和文件，返回空结果
-        if not message_data and not file_data:
+        if not message_data and not file_data and not neo_file_data:
             return QuerySessionResponse(
                 ok=1,
                 failed="No data found",
                 conversation_id=request.conversation_id,
                 session_title="",
                 chats=[],
-                files=[]
+                files=[],
+                neo_files=[]
             )
 
         # 构建带工具信息的响应
@@ -344,6 +360,16 @@ async def search_specific_session_sql(
             for file in file_data
         ]
 
+        # 构建neo_files信息响应
+        neo_files = [
+            FileItem(
+                file_name=file.file_name,
+                file_path=file.file_path,
+                file_desc=file.file_desc
+            )
+            for file in neo_file_data
+        ]   
+
         return QuerySessionResponse(
             ok=0,
             failed="",
@@ -351,7 +377,8 @@ async def search_specific_session_sql(
             session_title=conversation.session_title,
             chat_type=conversation.chat_type,
             chats=chats,
-            files=files  # 添加文件信息
+            files=files,  # 添加文件信息
+            neo_files=neo_files
         )
 
     except Exception as e:
@@ -362,7 +389,8 @@ async def search_specific_session_sql(
             session_title="",
             chat_type=conversation.chat_type,
             chats=[],
-            files=[]
+            files=[],
+            neo_files=[]
         )
 
 
@@ -794,3 +822,164 @@ async def process_messages(
                 ok=1,
                 failed=str(e)
             )
+
+# 使用 update 操作更新uploadfiles的file_type字段值,并输出QuerySessionResponse: 包含会话消息、文件和neo_files的完整响应
+@with_async_session
+async def update_uploadfiles_file_type_sql(
+    session,
+    file_paths: list[str], 
+    conversation_id: str,
+):
+    try:
+        # 执行批量更新
+        stmt = (
+            update(UploadedFile)
+            .where(
+                UploadedFile.file_path.in_(file_paths),
+                UploadedFile.conversation_id == conversation_id
+            )
+            .values(file_type="application/octet-stream")
+        )
+        
+        await session.execute(stmt)
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        return {
+            "ok": 1,
+            "failed": str(e)
+        }
+        
+    try:
+        # 查询Conversation以获取session_title并验证会话存在性和权限
+        conversation_query = select(ConversationModel).where(
+            ConversationModel.id == conversation_id)
+        conversation_result = await session.execute(conversation_query)
+        conversation = conversation_result.scalars().first()
+
+        if conversation is None:
+            return {
+                "ok": 1,
+                "failed": "Session not found"
+            }            
+        # 查询会话历史消息
+        message_query = (
+            select(MessageModel)
+            .where(MessageModel.conversation_id == conversation_id)
+            .options(selectinload(MessageModel.tools))  # 加载关联工具
+            .order_by(desc(MessageModel.create_time))
+        )
+        message_result = await session.execute(message_query)
+        message_data = message_result.scalars().unique().all()
+
+
+        # 查询会话关联的文件（排除 neo_default_file）
+        file_query = (
+            select(UploadedFile)
+            .where(
+                UploadedFile.conversation_id == conversation_id,
+                UploadedFile.file_type != "neo_default_file"  # 排除 neo_default_file
+            )
+            .order_by(desc(UploadedFile.create_time)))
+        file_result = await session.execute(file_query)
+        file_data = file_result.scalars().unique().all()
+
+        # 单独查询 neo_default_file 类型的文件
+        neo_file_query = (
+            select(UploadedFile)
+            .where(
+                UploadedFile.conversation_id == conversation_id,
+                UploadedFile.file_type == "neo_default_file"  # 仅查询 neo_default_file
+            )
+            .order_by(desc(UploadedFile.create_time)))
+        neo_file_result = await session.execute(neo_file_query)
+        neo_file_data = neo_file_result.scalars().unique().all()        
+
+
+        # 如果没有消息和文件，返回空结果
+        if not message_data and not file_data and not neo_file_data:
+            return QuerySessionResponse(
+                ok=1,
+                failed="No data found",
+                conversation_id=conversation_id,
+                session_title="",
+                chats=[],
+                files=[],
+                neo_files=[]
+            )
+
+        # 构建带工具信息的响应
+        chats = []
+        for message in message_data:
+            # 处理工具信息（自动按 create_time 排序）
+            tools = [
+                ToolItem(
+                    tool_name=tool.tool_name,
+                    tool_args=tool.tool_args,
+                    tool_result=tool.tool_result,
+                    tool_result_analysis=tool.tool_result_analysis,
+                    create_time=tool.create_time.strftime('%Y-%m-%d %H:%M:%S')
+                )
+                # 双重排序保障
+                for tool in sorted(message.tools, key=lambda x: x.create_time)
+            ]
+
+            # print(f"Tools for message ID {message.id}:")
+            # for tool in tools:
+            #     print(f"  - Tool Name: {tool.tool_name}")
+            #     print(f"    Tool Args: {tool.tool_args}")
+            #     print(f"    Tool Result: {tool.tool_result}")
+            #     print(f"    Create Time: {tool.create_time}")
+
+            chats.append(ChatItemWithTools(
+                id=message.id,
+                query=message.query,
+                response=message.response,
+                create_time=message.create_time.strftime('%Y-%m-%d %H:%M:%S'),
+                tools=tools
+            ))
+
+        # 构建文件信息响应
+        files = [
+            FileItem(
+                file_name=file.file_name,
+                file_path=file.file_path,
+                file_desc=file.file_desc
+            )
+            for file in file_data
+        ]
+
+        # 构建neo_files信息响应
+        neo_files = [
+            FileItem(
+                file_name=file.file_name,
+                file_path=file.file_path,
+                file_desc=file.file_desc
+            )
+            for file in neo_file_data
+        ]   
+
+        return QuerySessionResponse(
+            ok=0,
+            failed="",
+            conversation_id=conversation_id,
+            session_title=conversation.session_title,
+            chat_type=conversation.chat_type,
+            chats=chats,
+            files=files,  # 添加文件信息
+            neo_files=neo_files
+        )
+
+    except Exception as e:
+        return QuerySessionResponse(
+            ok=1,
+            failed=str(e),
+            conversation_id= conversation_id,
+            session_title="",
+            chat_type=conversation.chat_type,
+            chats=[],
+            files=[],
+            neo_files=[]
+        )
+
+        
