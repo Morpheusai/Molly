@@ -435,7 +435,6 @@ app.include_router(display_router, prefix="/backend")
 app.include_router(weblogo_generate, prefix="/backend")
 app.include_router(files_migrate, prefix="/backend")
 
-
 app.post("/query_user_info", tags=["用户数据"], summary="查询用户信息")(query_user_info)
 
 app.post("/backend/delete_specific_session",
@@ -458,3 +457,6 @@ app.post("/backend/get_new_session_id",
 
 app.post("/backend/update_session_name",
          tags=["会话数据"], summary="更改会话名称")(update_session_name)
+
+app.post("/backend/reset_session_messages",
+         tags=["重置会话"], summary="初始化会话消息")(reset_conversation)

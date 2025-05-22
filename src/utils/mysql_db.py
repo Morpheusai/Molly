@@ -14,6 +14,7 @@ from fastapi import (
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import delete, desc, update
 from sqlalchemy.dialects.mysql import insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -981,5 +982,89 @@ async def update_uploadfiles_file_type_sql(
             files=[],
             neo_files=[]
         )
+#初始化demo聊天区
+async def reset_conversation_sql(
+    session: AsyncSession,
+    credentials: HTTPAuthorizationCredentials,
+    request: ResetConversationRequest
+):
+    try:
+        # 提取并校验 token
+        system_token = credentials.credentials  # 直接获取Token
+        payload = decode_vaild(system_token,SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if unionid is None:
+            return BaseResponse(ok=1, failed="unionid不存在") 
+    except Exception as e:
+        return BaseResponse(ok=1, failed=f"Token校验失败: {e}")
+    try:
+        # 检查会话是否存在且属于当前用户
+        result = await session.execute(
+            select(ConversationModel)
+            .where(ConversationModel.id == request.conversation_id)
+            .where(ConversationModel.user_id == unionid)
+        )
+        conversation = result.scalar_one_or_none()
 
+        if not conversation:
+            return BaseResponse(ok=1, failed="Conversation not found or does not belong to the user")
         
+        # 找到初始消息（最早的create_time）
+        message_query = (
+            select(MessageModel)
+            .where(MessageModel.conversation_id == request.conversation_id)
+            .options(selectinload(MessageModel.tools))
+            .order_by(MessageModel.create_time.asc())
+            .limit(1)
+        )
+        message_result = await session.execute(message_query)
+        initial_message = message_result.scalars().first()
+        
+        # 删除与会话关联的工具，但保留初始消息的工具（如果有）
+        if initial_message is not None:
+            initial_message_tool_ids = [tool.id for tool in initial_message.tools]
+            if initial_message_tool_ids:
+                await session.execute(
+                    delete(ToolModel)
+                    .where(ToolModel.conversation_id == request.conversation_id)
+                    .where(~ToolModel.id.in_(initial_message_tool_ids))
+                )
+            else:
+                # 初始消息没有工具，删除所有工具
+                await session.execute(
+                    delete(ToolModel)
+                    .where(ToolModel.conversation_id == request.conversation_id)
+                )
+                
+        # 删除除初始消息外的所有消息
+        if initial_message is not None:
+            await session.execute(
+                delete(MessageModel)
+                .where(MessageModel.conversation_id == request.conversation_id)
+                .where(MessageModel.id != initial_message.id)
+            )
+
+        # 删除用户上传的文件（file_origin=0），保留系统默认文件（file_origin=1）
+        await session.execute(
+            delete(UploadedFile)
+            .where(UploadedFile.conversation_id == request.conversation_id)
+            .where(UploadedFile.file_origin == 0)
+        )
+
+        # 更新系统默认文件（file_origin=1）的file_type为"neo_default_file"
+        await session.execute(
+            update(UploadedFile)
+            .where(UploadedFile.conversation_id == request.conversation_id)
+            .where(UploadedFile.file_origin == 1)
+            .values(file_type="neo_default_file")
+        )
+        # 提交事务
+        await session.commit()
+        return BaseResponse(ok=0, failed="")
+    
+    except SQLAlchemyError as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=f"数据库错误: {e}")
+    except Exception as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=f"系统错误: {e}")

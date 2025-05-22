@@ -102,7 +102,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             file_size=411,
             file_hash="ae840fb19516a28418991cf7f58f665b4fef79ba683f0ae9a2425197124484dd",
             file_status=True,
-            file_origin=0,
+            file_origin=1,
             create_time=datetime.strptime(
                 "2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
 
@@ -150,7 +150,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             file_size=411,
             file_hash="7e9cb7c2a7c6446166f0e16ad64965b001fdae1437c7ea8353a6d02bdae7b3b8",
             file_status=True,
-            file_origin=0,
+            file_origin=1,
             create_time=datetime.strptime(
                 "2025-03-07 14:30:10", "%Y-%m-%d %H:%M:%S")
 
@@ -166,7 +166,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             file_size=411,
             file_hash="d6c3050ff6dc92b65a36ba7c755cdaee2aad67da4a74fcad7d34ca49e0063b58",
             file_status=True,
-            file_origin=0,
+            file_origin=1,
             create_time=datetime.strptime(
                 "2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
 

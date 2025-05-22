@@ -103,3 +103,11 @@ async def update_uploadfiles_file_type(
         conversation_id: str,
 ):
         return await update_uploadfiles_file_type_sql(file_paths,conversation_id)
+
+# 
+async def reset_conversation(
+        session: AsyncSession = Depends(get_async_db),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        request: ResetConversationRequest = Body(...)
+):
+        return await reset_conversation_sql(session,credentials,request)

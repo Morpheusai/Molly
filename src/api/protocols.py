@@ -174,5 +174,6 @@ class WebLogoRequest(BaseModel):
 class MigrateFileRequest(BaseModel):
     file_paths: List[str]
     conversation_id: str
-
-  
+    
+class ResetConversationRequest(BaseModel):
+    conversation_id: str
