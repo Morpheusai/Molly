@@ -35,7 +35,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             session_title="肽段-MHC亲和力智能筛选助手",
             chat_type="pmhc_affinity_prediction",  # config,
             create_time=datetime.strptime(
-                "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
+                "2025-03-07 14:31:00", "%Y-%m-%d %H:%M:%S")
         )
         #patient_case_mrna_research会话
         patient_conversation_id = str(uuid.uuid4())
@@ -45,7 +45,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             session_title="患者个体化mRNA疫苗设计助手",
             chat_type="patient_case_mrna",  # config,
             create_time=datetime.strptime(
-                "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
+                "2025-03-07 14:33:00", "%Y-%m-%d %H:%M:%S")
         )
 
         #neo_antigen_research会话
@@ -56,7 +56,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             session_title="患者个体化antigen筛选设计助手",
             chat_type="neo_antigen",  # config,
             create_time=datetime.strptime(
-                "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
+                "2025-03-07 14:32:00", "%Y-%m-%d %H:%M:%S")
         )        
 
         session.add_all([pmhc_conversation, patient_conversation,neo_antigen_conversation]) 
@@ -144,11 +144,11 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             id=str(uuid.uuid4()),
             conversation_id=patient_conversation_id,
             file_name="PancreaticCase.txt",
-            file_path="minio://molly/cc51859d-c60f-4a82-aa03-3883060a2d7a_PancreaticCase.txt",
+            file_path="minio://molly/84bead45-b74c-4eb8-924d-f9fd052822b9_PancreaticCase.txt",
             file_desc="胰腺癌病例分析",
             file_type="neo_default_file",
-            file_size=411,
-            file_hash="7e9cb7c2a7c6446166f0e16ad64965b001fdae1437c7ea8353a6d02bdae7b3b8",
+            file_size=1714,
+            file_hash="a23cb0491c5a8cf46ba51157c899d6b2559373550b01bd23e5d35b5aadb94551",
             file_status=True,
             file_origin=1,
             create_time=datetime.strptime(
@@ -160,11 +160,11 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             id=str(uuid.uuid4()),
             conversation_id=patient_conversation_id,
             file_name="PancreaticSeq.fsa",
-            file_path="minio://molly/e455e138-2819-4e9f-b714-f9a20f1d2604_PancreaticSeq.fsa",
+            file_path="minio://molly/a3173986-f964-43a1-95dd-694fa93ee150_PancreaticSeq.fsa",
             file_desc="胰腺蛋白序列分析",
             file_type="neo_default_file",
-            file_size=411,
-            file_hash="d6c3050ff6dc92b65a36ba7c755cdaee2aad67da4a74fcad7d34ca49e0063b58",
+            file_size=573,
+            file_hash="4e3a006c929b9b9c326fca34a26ea450cba37da46c2563bb6eed5bc12472a08a",
             file_status=True,
             file_origin=1,
             create_time=datetime.strptime(
