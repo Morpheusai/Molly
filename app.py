@@ -303,7 +303,7 @@ async def backend_chat_with_files(
         select(UploadedFile).where(
             UploadedFile.conversation_id == conversation_id,
             UploadedFile.file_status == True,
-            UploadedFile.file_origin == 0
+            UploadedFile.file_type != "neo_default_file"
         )
     )
     uploaded_files = uploaded_files.scalars().all()

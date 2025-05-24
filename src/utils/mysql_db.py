@@ -1,3 +1,4 @@
+import httpx
 import json
 import os
 import uuid
@@ -28,6 +29,7 @@ from src.db.uploadfiles_model import UploadedFile
 from src.db.user_model import UserModel
 from src.utils.jwt_util import decode_vaild
 from src.utils.session import get_async_db, with_async_session
+from src.utils.delete_agent_state import remote_delete_agent_state
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "")  # 用于签名和验证 JWT 的密钥
 ALGORITHM = os.getenv("ALGORITHM", "HS256")  # 加密算法
@@ -151,6 +153,19 @@ async def delete_specific_session_sql(
             delete(UploadedFile)
             .where(UploadedFile.conversation_id == request.conversation_id)
         )
+        
+        try:
+            response = await remote_delete_agent_state(request.conversation_id)
+            if response.get("status") != "success":
+                await session.rollback()
+                return BaseResponse(ok=1, failed=f"远程状态清理失败：{response.get('message', '未知错误')}")
+        except httpx.RequestError as e:
+            await session.rollback()
+            return BaseResponse(ok=1, failed=f"远程调用网络错误：{str(e)}")
+        except Exception as e:
+            await session.rollback()
+            return BaseResponse(ok=1, failed=f"远程调用未知错误：{str(e)}")
+        
 
         # 删除会话
         await session.delete(conversation)
@@ -201,6 +216,18 @@ async def delete_sessions_sql(
                     ok=0,
                     failed=""
                 )
+            for sid in session_ids:
+                try:
+                    response = await remote_delete_agent_state(sid)
+                    if response.get("status") != "success":
+                        await session.rollback()
+                        return BaseResponse(ok=1, failed=f"远程状态清理失败：{response.get('message', '未知错误')} (thread_id={sid})")
+                except httpx.RequestError as e:
+                    await session.rollback()
+                    return BaseResponse(ok=1, failed=f"远程调用网络错误：{str(e)} (thread_id={sid})")
+                except Exception as e:
+                    await session.rollback()
+                    return BaseResponse(ok=1, failed=f"远程调用未知错误：{str(e)} (thread_id={sid})")
 
             # 删除所有会话关联的工具
             await session.execute(
@@ -1058,6 +1085,19 @@ async def reset_conversation_sql(
             .where(UploadedFile.file_origin == 1)
             .values(file_type="neo_default_file")
         )
+        
+        try:
+            response = await remote_delete_agent_state(request.conversation_id)
+            if response.get("status") != "success":
+                await session.rollback()
+                return BaseResponse(ok=1, failed=f"远程状态清理失败：{response.get('message', '未知错误')}")
+        except httpx.RequestError as e:
+            await session.rollback()
+            return BaseResponse(ok=1, failed=f"远程调用网络错误：{str(e)}")
+        except Exception as e:
+            await session.rollback()
+            return BaseResponse(ok=1, failed=f"远程调用未知错误：{str(e)}")
+        
         # 提交事务
         await session.commit()
         return BaseResponse(ok=0, failed="")
