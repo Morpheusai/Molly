@@ -205,7 +205,7 @@ async def delete_sessions_sql(
             result = await session.execute(
                 select(ConversationModel.id).where(
                     ConversationModel.user_id == unionid,
-                    ConversationModel.chat_type != 'demo'
+                    ConversationModel.chat_type == 'normal'
                 )
             )
             session_ids = result.scalars().all()
@@ -253,7 +253,7 @@ async def delete_sessions_sql(
             await session.execute(
                 delete(ConversationModel).where(
                     ConversationModel.user_id == unionid,
-                    ConversationModel.chat_type != 'demo'
+                    ConversationModel.chat_type == 'normal'
                 )
             )
 

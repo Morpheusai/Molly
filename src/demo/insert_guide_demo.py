@@ -144,11 +144,11 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
             id=str(uuid.uuid4()),
             conversation_id=patient_conversation_id,
             file_name="PancreaticCase.txt",
-            file_path="minio://molly/84bead45-b74c-4eb8-924d-f9fd052822b9_PancreaticCase.txt",
+            file_path="minio://molly/54d84f34-3917-4a9d-86f0-69f2f560933f_PancreaticCase.txt",
             file_desc="胰腺癌病例分析",
             file_type="neo_default_file",
             file_size=1714,
-            file_hash="a23cb0491c5a8cf46ba51157c899d6b2559373550b01bd23e5d35b5aadb94551",
+            file_hash="f1bf863f73245b3d6052338c6dee9ad3125e78906197b5e25dcfc16faac5c19d",
             file_status=True,
             file_origin=1,
             create_time=datetime.strptime(
