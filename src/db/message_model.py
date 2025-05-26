@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey, func, CHAR, Text
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import relationship
 
 from src.utils.base import Base
@@ -16,7 +17,7 @@ class MessageModel(Base):
 
     query = Column(Text, comment='用户问题')
 
-    response = Column(Text, comment='模型回答')
+    response = Column(MEDIUMTEXT, comment='模型回答')
 
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
 
