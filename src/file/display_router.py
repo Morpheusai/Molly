@@ -163,6 +163,17 @@ async def display_router(
                     "failed": "Failed to decode file content"
                 }
             content_target = text_content
+        elif bucket_name == "rnaplot-results":
+            try:
+                # SVG 文件是文本格式，直接解码为 UTF-8
+                svg_content = file_content.decode("utf-8")
+                content_target = svg_content
+            except UnicodeDecodeError:
+                logger.error(f"Failed to decode SVG file: {file_path}")
+                return {
+                    "ok": 1,
+                    "failed": "Failed to decode SVG file"
+                }
         else:
             # 如果 bucket_name 不是上述两种情况，可以抛出异常或设置默认值
             logger.error(f"Unsupported bucket name: {bucket_name}")

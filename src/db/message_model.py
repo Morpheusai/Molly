@@ -17,8 +17,8 @@ class MessageModel(Base):
 
     query = Column(Text, comment='用户问题')
 
-    response = Column(MEDIUMTEXT, comment='模型回答')
-
+    response = Column(MEDIUMTEXT, comment='模型回答') 
+   
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
 
     # 记录知识库id等，以便后续扩展

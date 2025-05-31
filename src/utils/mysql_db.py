@@ -357,6 +357,7 @@ async def search_specific_session_sql(
                     tool_args=tool.tool_args,
                     tool_result=tool.tool_result,
                     tool_result_analysis=tool.tool_result_analysis,
+                    tool_middle_result=tool.tool_middle_result,
                     create_time=tool.create_time.strftime('%Y-%m-%d %H:%M:%S')
                 )
                 # 双重排序保障
@@ -683,9 +684,9 @@ async def process_messages(
     ai_messages: List[Dict],
     tool_messages: List[Dict],
     tool_result_analysis_list: list,
-    msg_response: str
+    msg_response: str,
+    tool_middle_result: str,
 ):
-
     # 找到最后一个有内容的 AI 消息
     # for ai_msg in ai_messages:
     #     content = ai_msg.get("content", {})
@@ -812,21 +813,40 @@ async def process_messages(
             # 获取对应索引的分析结果
             tool_analysis = tool_result_analysis_list[index] if index < len(
                 tool_result_analysis_list) else ""
-            tool_models.append(
-                ToolModel(
-                    id=new_id,
-                    message_id=msg_id,  # 关联到 message 表的 ID
-                    conversation_id=conversation_id,
-                    tool_id=tool_call_id,
-                    tool_name=tool_info["name"],
-                    # 将 args 转为 JSON 字符串
-                    tool_args=json.dumps(tool_info["args"]),
-                    # tool_result=content.get('content', ''), #当前工具返回的是一个json，text/link
-                    tool_result=content.get('content', ""),
-                    create_time=current_time,
-                    tool_result_analysis=tool_analysis
+            #目前只考虑而每次调用只要一个工具的中间结果的情况
+            if index==0:
+                tool_models.append(
+                    ToolModel(
+                        id=new_id,
+                        message_id=msg_id,  # 关联到 message 表的 ID
+                        conversation_id=conversation_id,
+                        tool_id=tool_call_id,
+                        tool_name=tool_info["name"],
+                        # 将 args 转为 JSON 字符串
+                        tool_args=json.dumps(tool_info["args"]),
+                        # tool_result=content.get('content', ''), #当前工具返回的是一个json，text/link
+                        tool_result=content.get('content', ""),
+                        tool_middle_result=tool_middle_result,
+                        create_time=current_time,
+                        tool_result_analysis=tool_analysis
+                    )
+                )            
+            else:    
+                tool_models.append(
+                    ToolModel(
+                        id=new_id,
+                        message_id=msg_id,  # 关联到 message 表的 ID
+                        conversation_id=conversation_id,
+                        tool_id=tool_call_id,
+                        tool_name=tool_info["name"],
+                        # 将 args 转为 JSON 字符串
+                        tool_args=json.dumps(tool_info["args"]),
+                        # tool_result=content.get('content', ''), #当前工具返回的是一个json，text/link
+                        tool_result=content.get('content', ""),
+                        create_time=current_time,
+                        tool_result_analysis=tool_analysis
+                    )
                 )
-            )
     # 批量插入工具数据
     if tool_models:
         try:

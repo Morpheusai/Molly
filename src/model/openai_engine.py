@@ -33,6 +33,10 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
     # 用于存储收集到的 AI 和 Tool 消息
     ai_messages: List[Dict] = []  # 存储所有 AI 类型消息
     tool_messages: List[Dict] = []  # 存储所有 Tool 类型消息
+    #存放tool的中间结果
+    tool_middle_result = None
+    #存放标识#NEO#的个数
+    tool_table_nums = 0
     # 用来将流式的消息进行分割
     current_response = None
     # 初始化
@@ -95,57 +99,73 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
             if chunk.startswith("data:"):
                 try:
                     data = json.loads(chunk[5:].strip())
-                    if data.get("type") == "message":
-                        content_dict = data.get("content", {})
-                        msg_type = content_dict.get("type")
-                        if msg_type == "ai":
-                            ai_messages.append(data)
-                        elif msg_type == "tool":
-                            flag_j += 1
-                            tool_messages.append(data)
-                    elif data.get("type") == "token":
-                        # 添加response信息
-                        if flag_i == flag_j and flag_i == 0:
+                    if data.get("content", "") == "#NEO#":
+                        tool_table_nums += 1
+                        tool_middle_result = (
+                                    tool_middle_result or "") + "#NEO#"
+                    elif tool_table_nums % 2 != 0:
+                        #添加后标签词#NEO#
                             content = data.get("content", "")
-                            msg_response += content
-                        elif flag_i == flag_j:
+                            tool_middle_result = (
+                                        tool_middle_result or "") + content
+                    else:
+                        #添加前标签词#NEO#
+                        if data.get("type") == "table":
+                            tool_table_nums += 1
                             content = data.get("content", "")
-                            current_response = (
-                                current_response or "") + content
-                        else:
-                            flag_i += 1
-                            # 多个工具调用
-                            if current_response is not None and flag_i != flag_j:
-                                tool_result_analysis_list.append(
-                                    current_response)
-                                while flag_i < flag_j:
-                                    flag_i += 1
-                                    tool_result_analysis_list.append("")
+                            tool_middle_result = (
+                                        tool_middle_result or "") + content
+                        elif data.get("type") == "message":
+                            content_dict = data.get("content", {})
+                            msg_type = content_dict.get("type")
+                            if msg_type == "ai":
+                                ai_messages.append(data)
+                            elif msg_type == "tool":
+                                flag_j += 1
+                                tool_messages.append(data)
+                        elif data.get("type") == "token":
+                            # 添加response信息
+                            if flag_i == flag_j and flag_i == 0:
+                                content = data.get("content", "")
+                                msg_response += content
+                            elif flag_i == flag_j:
+                                content = data.get("content", "")
+                                current_response = (
+                                    current_response or "") + content
+                            else:
+                                flag_i += 1
+                                # 多个工具调用
+                                if current_response is not None and flag_i != flag_j:
+                                    tool_result_analysis_list.append(
+                                        current_response)
+                                    while flag_i < flag_j:
+                                        flag_i += 1
+                                        tool_result_analysis_list.append("")
 
-                                current_response = None
-                                content = data.get("content", "")
-                                current_response = (
-                                    current_response or "") + content
+                                    current_response = None
+                                    content = data.get("content", "")
+                                    current_response = (
+                                        current_response or "") + content
 
-                            elif current_response is not None and flag_i == flag_j:
-                                tool_result_analysis_list.append(
-                                    current_response)
-                                current_response = None
-                                content = data.get("content", "")
-                                current_response = (
-                                    current_response or "") + content
-                            # 解决开头token丢失问题
-                            elif current_response is None and flag_i == flag_j:
-                                content = data.get("content", "")
-                                current_response = (
-                                    current_response or "") + content
-                            elif current_response is None and flag_i != flag_j:
-                                while flag_i < flag_j:
-                                    flag_i += 1
-                                    tool_result_analysis_list.append("")
-                                content = data.get("content", "")
-                                current_response = (
-                                    current_response or "") + content
+                                elif current_response is not None and flag_i == flag_j:
+                                    tool_result_analysis_list.append(
+                                        current_response)
+                                    current_response = None
+                                    content = data.get("content", "")
+                                    current_response = (
+                                        current_response or "") + content
+                                # 解决开头token丢失问题
+                                elif current_response is None and flag_i == flag_j:
+                                    content = data.get("content", "")
+                                    current_response = (
+                                        current_response or "") + content
+                                elif current_response is None and flag_i != flag_j:
+                                    while flag_i < flag_j:
+                                        flag_i += 1
+                                        tool_result_analysis_list.append("")
+                                    content = data.get("content", "")
+                                    current_response = (
+                                        current_response or "") + content
                 except json.JSONDecodeError as e:
                     # 记录错误信息和出错的内容
                     logger.error(f"JSONDecodeError encountered: {e}")
@@ -155,4 +175,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                 # tool_result_analysis_list+=current_response
 
     # 处理消息
-    await process_messages(msg_id, conversation_id, ai_messages, tool_messages, tool_result_analysis_list, msg_response)
+    await process_messages(msg_id, conversation_id, ai_messages, tool_messages, tool_result_analysis_list, msg_response, tool_middle_result)
+
+#data: {"type": "writer_token", 
+#       "content": "{\"type\": \"link\", \"url\": {\"rnaflod_result_file_url\": \"minio://rnafold-results/65c27f5cc37644cfa681507ba375d611_RNAFold_results.xlsx\", \"sequence_0002_ss\": \"minio://rnaplot-results/2f024614521548eeb211c21e21449b2f_svg_file.svg\", \"sequence_0001_ss\": \"minio://rnaplot-results/51d00ab44bce452186457caa75bbda66_svg_file.svg\"}, \"content\": \"\"}"}

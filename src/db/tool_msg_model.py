@@ -23,6 +23,8 @@ class ToolModel(Base):
 
     tool_args = Column(Text, comment='工具调用参数')
 
+    tool_middle_result = Column(Text, default="", comment='工具中间结果')
+
     tool_result = Column(Text, comment='工具返回结果')
 
     create_time = Column(DateTime, default=func.now(), comment='创建时间')

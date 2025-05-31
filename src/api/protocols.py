@@ -81,6 +81,7 @@ class ToolItem(BaseModel):
     tool_result: str  
     create_time: str
     tool_result_analysis :str
+    tool_middle_result :str
 
 class ChatItemWithTools(BaseModel):
     id: str
