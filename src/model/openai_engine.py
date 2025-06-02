@@ -37,6 +37,8 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
     tool_middle_result = None
     #存放标识#NEO#的个数
     tool_table_nums = 0
+    #标识respon中的markdown
+    response_table_nums = 0
     # 用来将流式的消息进行分割
     current_response = None
     # 初始化
@@ -99,7 +101,17 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
             if chunk.startswith("data:"):
                 try:
                     data = json.loads(chunk[5:].strip())
-                    if data.get("content", "") == "#NEO#":
+                    if data.get("content", "") == "#NEO_RESPONSE#":
+                        response_table_nums += 1
+                        msg_response = (
+                                    msg_response or "") + "#NEO_RESPONSE#"
+                    elif response_table_nums % 2 != 0:
+                        #添加后标签词#NEO#
+                            content = data.get("content", "")
+                            msg_response = (
+                                        msg_response or "") + content
+
+                    elif data.get("content", "") == "#NEO#":
                         tool_table_nums += 1
                         tool_middle_result = (
                                     tool_middle_result or "") + "#NEO#"
@@ -110,11 +122,16 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                                         tool_middle_result or "") + content
                     else:
                         #添加前标签词#NEO#
-                        if data.get("type") == "table":
+                        if data.get("type") == "table" and data.get("content") == "#NEO#":
                             tool_table_nums += 1
                             content = data.get("content", "")
                             tool_middle_result = (
                                         tool_middle_result or "") + content
+                        elif data.get("type") == "response_table" and data.get("content") == "#NEO_RESPONSE#":
+                            response_table_nums += 1
+                            content = data.get("content", "")
+                            msg_response = (
+                                        msg_response or "") + content
                         elif data.get("type") == "message":
                             content_dict = data.get("content", {})
                             msg_type = content_dict.get("type")
