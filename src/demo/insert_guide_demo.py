@@ -186,10 +186,11 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
 ### • 🧪 点击预览并使用我们提供的示例数据进行体验
 ### • ❓ 获取引导，了解流程与所需输入内容
 我们已为您准备了：
-✔️ 突变序列示例.fasta文件
- • 👉 [PancreaticSec.fsa] 
 ✔️ 模拟病例.txt文件
- • 👉 [PancreaticCast.txt]
+ • 👉 [PancreaticCase.txt]
+✔️ 突变序列示例.fasta文件
+ • 👉 [PancreaticSeq.fsa] 
+
 
 ## 👉 请选择您希望的操作：
 ### 1️⃣ 了解预测流程与筛选逻辑
