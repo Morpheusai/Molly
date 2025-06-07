@@ -38,15 +38,15 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
                 "2025-03-07 14:31:00", "%Y-%m-%d %H:%M:%S")
         )
         #patient_case_mrna_research会话
-        patient_conversation_id = str(uuid.uuid4())
-        patient_conversation = ConversationModel(
-            id=patient_conversation_id,
-            user_id=user_id,
-            session_title="患者个体化mRNA疫苗设计助手",
-            chat_type="patient_case_mrna",  # config,
-            create_time=datetime.strptime(
-                "2025-03-07 14:33:00", "%Y-%m-%d %H:%M:%S")
-        )
+        # patient_conversation_id = str(uuid.uuid4())
+        # patient_conversation = ConversationModel(
+        #     id=patient_conversation_id,
+        #     user_id=user_id,
+        #     session_title="患者个体化mRNA疫苗设计助手",
+        #     chat_type="patient_case_mrna",  # config,
+        #     create_time=datetime.strptime(
+        #         "2025-03-07 14:33:00", "%Y-%m-%d %H:%M:%S")
+        # )
 
         #neo_antigen_research会话
         neo_antigen_conversation_id = str(uuid.uuid4())
@@ -59,7 +59,7 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
                 "2025-03-07 14:32:00", "%Y-%m-%d %H:%M:%S")
         )        
 
-        session.add_all([pmhc_conversation, patient_conversation,neo_antigen_conversation]) 
+        session.add_all([pmhc_conversation, neo_antigen_conversation]) 
 
 
 
@@ -109,70 +109,70 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         )
         session.add(pmhc_uploaded_file)
 
-#patient_case_mrna_research会话相关信息插入
-        patient_response_text = \
-            """
-🌟 欢迎来到患者个体化mRNA疫苗设计助手！ 🌟
-我们致力于为每位患者定制高效、精准的mRNA疫苗方案，结合您的临床数据与AI预测，筛选最优抗原靶点，加速个性化治疗进程。
-💡 操作流程指引：
-✅ 1. 上传患者数据：
-    📊 临床病例数据：病人的基础病例信息
-    🧬 基因测序文件：病人的测试肽段序列
-✅ 2. 智能分析与设计：
-    🧠 AI方案生成：结合专业知识库及案例，生成建议治疗方案
-    🛠️ 端到端运行：LLM驱动工具库调用，End to end生成结果
+# #patient_case_mrna_research会话相关信息插入
+#         patient_response_text = \
+#             """
+# 🌟 欢迎来到患者个体化mRNA疫苗设计助手！ 🌟
+# 我们致力于为每位患者定制高效、精准的mRNA疫苗方案，结合您的临床数据与AI预测，筛选最优抗原靶点，加速个性化治疗进程。
+# 💡 操作流程指引：
+# ✅ 1. 上传患者数据：
+#     📊 临床病例数据：病人的基础病例信息
+#     🧬 基因测序文件：病人的测试肽段序列
+# ✅ 2. 智能分析与设计：
+#     🧠 AI方案生成：结合专业知识库及案例，生成建议治疗方案
+#     🛠️ 端到端运行：LLM驱动工具库调用，End to end生成结果
 
-📥 我们提供了一个临床病例数据及其基因测序文件，您可以选择使用。
-            """
+# 📥 我们提供了一个临床病例数据及其基因测序文件，您可以选择使用。
+#             """
 
 
-        patient_messages = [
-            MessageModel(
-                # "04abe03e-92d0-41d1-afc6-25de0b861e6b",
-                id=str(uuid.uuid4()),
-                conversation_id=patient_conversation_id,
-                query="",
-                response=patient_response_text,
-                create_time=datetime.strptime(
-                    "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
-            ),
-        ]
-        for message in patient_messages:
-            session.add(message)
+#         patient_messages = [
+#             MessageModel(
+#                 # "04abe03e-92d0-41d1-afc6-25de0b861e6b",
+#                 id=str(uuid.uuid4()),
+#                 conversation_id=patient_conversation_id,
+#                 query="",
+#                 response=patient_response_text,
+#                 create_time=datetime.strptime(
+#                     "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
+#             ),
+#         ]
+#         for message in patient_messages:
+#             session.add(message)
 
-        patient_uploaded_file_one = UploadedFile(
-            id=str(uuid.uuid4()),
-            conversation_id=patient_conversation_id,
-            file_name="PancreaticCase.txt",
-            file_path="minio://molly/54d84f34-3917-4a9d-86f0-69f2f560933f_PancreaticCase.txt",
-            file_desc="胰腺癌病例分析",
-            file_type="neo_default_file",
-            file_size=1714,
-            file_hash="f1bf863f73245b3d6052338c6dee9ad3125e78906197b5e25dcfc16faac5c19d",
-            file_status=True,
-            file_origin=1,
-            create_time=datetime.strptime(
-                "2025-03-07 14:30:10", "%Y-%m-%d %H:%M:%S")
+#         patient_uploaded_file_one = UploadedFile(
+#             id=str(uuid.uuid4()),
+#             conversation_id=patient_conversation_id,
+#             file_name="PancreaticCase.txt",
+#             file_path="minio://molly/54d84f34-3917-4a9d-86f0-69f2f560933f_PancreaticCase.txt",
+#             file_desc="胰腺癌病例分析",
+#             file_type="neo_default_file",
+#             file_size=1714,
+#             file_hash="f1bf863f73245b3d6052338c6dee9ad3125e78906197b5e25dcfc16faac5c19d",
+#             file_status=True,
+#             file_origin=1,
+#             create_time=datetime.strptime(
+#                 "2025-03-07 14:30:10", "%Y-%m-%d %H:%M:%S")
 
-        )
+#         )
 
-        patient_uploaded_file_two = UploadedFile(
-            id=str(uuid.uuid4()),
-            conversation_id=patient_conversation_id,
-            file_name="PancreaticSeq.fsa",
-            file_path="minio://molly/aa8d6981-a2b3-44c7-b9ab-db3f02e54a9f_PancreaticSeq.fsa",
-            file_desc="胰腺蛋白序列分析",
-            file_type="neo_default_file",
-            file_size=184,
-            file_hash="b2cc33f845e023c47462dd4cd6a452c38cd06b121dbd464182eb2311aaf81f38",
-            file_status=True,
-            file_origin=1,
-            create_time=datetime.strptime(
-                "2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
+#         patient_uploaded_file_two = UploadedFile(
+#             id=str(uuid.uuid4()),
+#             conversation_id=patient_conversation_id,
+#             file_name="PancreaticSeq.fsa",
+#             file_path="minio://molly/aa8d6981-a2b3-44c7-b9ab-db3f02e54a9f_PancreaticSeq.fsa",
+#             file_desc="胰腺蛋白序列分析",
+#             file_type="neo_default_file",
+#             file_size=184,
+#             file_hash="b2cc33f845e023c47462dd4cd6a452c38cd06b121dbd464182eb2311aaf81f38",
+#             file_status=True,
+#             file_origin=1,
+#             create_time=datetime.strptime(
+#                 "2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
 
-        )
+#         )
 
-        session.add_all([patient_uploaded_file_two,patient_uploaded_file_one])
+#         session.add_all([patient_uploaded_file_two,patient_uploaded_file_one])
 
 #neo_antigen_research会话相关信息插入
         neo_antigen_response_text = \
@@ -240,6 +240,40 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
         ]
         for message in patient_messages:
             session.add(message)
+
+        patient_uploaded_file_one = UploadedFile(
+            id=str(uuid.uuid4()),
+            conversation_id=neo_antigen_conversation_id,
+            file_name="PancreaticCase.txt",
+            file_path="minio://molly/54d84f34-3917-4a9d-86f0-69f2f560933f_PancreaticCase.txt",
+            file_desc="胰腺癌病例分析",
+            file_type="neo_default_file",
+            file_size=1714,
+            file_hash="f1bf863f73245b3d6052338c6dee9ad3125e78906197b5e25dcfc16faac5c19d",
+            file_status=True,
+            file_origin=1,
+            create_time=datetime.strptime(
+                "2025-03-07 14:30:10", "%Y-%m-%d %H:%M:%S")
+
+        )
+
+        patient_uploaded_file_two = UploadedFile(
+            id=str(uuid.uuid4()),
+            conversation_id=neo_antigen_conversation_id,
+            file_name="PancreaticSeq.fsa",
+            file_path="minio://molly/aa8d6981-a2b3-44c7-b9ab-db3f02e54a9f_PancreaticSeq.fsa",
+            file_desc="胰腺蛋白序列分析",
+            file_type="neo_default_file",
+            file_size=184,
+            file_hash="b2cc33f845e023c47462dd4cd6a452c38cd06b121dbd464182eb2311aaf81f38",
+            file_status=True,
+            file_origin=1,
+            create_time=datetime.strptime(
+                "2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
+
+        )
+
+        session.add_all([patient_uploaded_file_two,patient_uploaded_file_one])
 
         # 提交事务
         await session.commit()

@@ -101,13 +101,14 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
             if chunk.startswith("data:"):
                 try:
                     data = json.loads(chunk[5:].strip())
-                    if data.get("content", "") == "#NEO_RESPONSE#":
+                    if data.get("content", "") == "#NEO_RESPONSE#" or data.get("content", "") == "#NEO_RESPONSE#\n":
                         response_table_nums += 1
                         msg_response = (
                                     msg_response or "") + "#NEO_RESPONSE#"
                     elif response_table_nums % 2 != 0:
                         #添加后标签词#NEO#
                             content = data.get("content", "")
+                            
                             msg_response = (
                                         msg_response or "") + content
 
