@@ -49,17 +49,29 @@ app.add_middleware(
 
 load_dotenv()
 # 微信开放平台应用的 AppID 和 AppSecret
+NEO_PRD_WECHAT_APP_ID = os.getenv("NEO_PRD_WECHAT_APP_ID", "")
+NEO_PRD_WECHAT_APP_SECRET = os.getenv("NEO_PRD_WECHAT_APP_SECRET", "")
+NEO_PRD_M_WECHAT_APP_ID = os.getenv("NEO_PRD_M_WECHAT_APP_ID", "")
+NEO_PRD_M_WECHAT_APP_SECRET = os.getenv("NEO_PRD_M_WECHAT_APP_SECRET", "")
+
+MOLLY_PRD_WECHAT_APP_ID = os.getenv("MOLLY_PRD_WECHAT_APP_ID", "")
+MOLLY_PRD_WECHAT_APP_SECRET = os.getenv("MOLLY_PRD_WECHAT_APP_SECRET", "")
+
+MOLLY_STG_WECHAT_APP_ID = os.getenv("MOLLY_STG_WECHAT_APP_ID", "")
+MOLLY_STG_WECHAT_APP_SECRET = os.getenv("MOLLY_STG_WECHAT_APP_SECRET", "")
+MOLLY_STG_M_WECHAT_APP_ID = os.getenv("MOLLY_STG_M_WECHAT_APP_ID", "")
+MOLLY_STG_M_WECHAT_APP_SECRET = os.getenv("MOLLY_STG_M_WECHAT_APP_SECRET", "")
+
 WECHAT_APP_ID = os.getenv("WECHAT_APP_ID", "")
 WECHAT_APP_SECRET = os.getenv("WECHAT_APP_SECRET", "")
-WECHAT_REDIRECT_URI = os.getenv("WECHAT_REDIRECT_URI", "")
 M_WECHAT_APP_ID = os.getenv("M_WECHAT_APP_ID", "")
 M_WECHAT_APP_SECRET = os.getenv("M_WECHAT_APP_SECRET", "")
+
 # JWT 配置
 SECRET_KEY = os.getenv("SECRET_KEY", "")  # 用于签名和验证 JWT 的密钥
 ALGORITHM = os.getenv("ALGORITHM", "HS256")  # 加密算法
 ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # JWT Token 过期时间
-
 
 @app.get("/")
 def read_root():
@@ -67,7 +79,7 @@ def read_root():
 
 
 @app.get("/backend/wechat_callback")
-async def wechat_callback(code: str) -> Dict[str, Any]:
+async def wechat_callback(app_id: str, code: str) -> Dict[str, Any]:
     """
     处理微信授权回调
     Args:
@@ -75,6 +87,23 @@ async def wechat_callback(code: str) -> Dict[str, Any]:
     Returns:
         Dict containing authentication response
     """
+    WECHAT_APP_ID = ""
+    WECHAT_APP_SECRET = ""
+    if app_id == NEO_PRD_WECHAT_APP_ID:
+        WECHAT_APP_ID = NEO_PRD_WECHAT_APP_ID
+        WECHAT_APP_SECRET = NEO_PRD_WECHAT_APP_SECRET
+    elif app_id == NEO_PRD_M_WECHAT_APP_ID:
+        WECHAT_APP_ID = NEO_PRD_M_WECHAT_APP_ID
+        WECHAT_APP_SECRET = NEO_PRD_M_WECHAT_APP_SECRET
+    elif app_id == MOLLY_PRD_WECHAT_APP_ID:
+        WECHAT_APP_ID = MOLLY_PRD_WECHAT_APP_ID
+        WECHAT_APP_SECRET = MOLLY_PRD_WECHAT_APP_SECRET
+    elif app_id == MOLLY_STG_WECHAT_APP_ID:
+        WECHAT_APP_ID = MOLLY_STG_WECHAT_APP_ID
+        WECHAT_APP_SECRET = MOLLY_STG_WECHAT_APP_SECRET
+    elif app_id == MOLLY_STG_M_WECHAT_APP_ID:
+        WECHAT_APP_ID = MOLLY_STG_M_WECHAT_APP_ID
+        WECHAT_APP_SECRET = MOLLY_STG_M_WECHAT_APP_SECRET
 
     # 1. 使用 code 获取 access_token
     token_url = f"https://api.weixin.qq.com/sns/oauth2/access_token?appid={WECHAT_APP_ID}&secret={WECHAT_APP_SECRET}&code={code}&grant_type=authorization_code"
@@ -150,92 +179,6 @@ async def wechat_callback(code: str) -> Dict[str, Any]:
         "headimgurl": user_info.get("headimgurl"),
         "nickname": user_info.get("nickname")
     }
-
-# 移动端请求
-
-
-@app.get("/backend/m_wechat_callback")
-async def m_wechat_callback(code: str) -> Dict[str, Any]:
-    """
-    处理微信授权回调
-    Args:
-        code: 微信授权返回的code
-    Returns:
-        Dict containing authentication response
-    """
-
-    # 1. 使用 code 获取 access_token
-    token_url = f"https://api.weixin.qq.com/sns/oauth2/access_token?appid={M_WECHAT_APP_ID}&secret={M_WECHAT_APP_SECRET}&code={code}&grant_type=authorization_code"
-    async with httpx.AsyncClient() as client:
-        response = await client.get(token_url)
-        token_data = response.json()
-        if "errcode" in token_data:
-            return {
-                "ok": "1",
-                "failed": f"微信API错误: {token_data.get('errmsg', '未知错误')}"
-            }
-
-    # 获取unionid
-    unionid = token_data.get("unionid")
-    if not unionid:
-        return {
-            "ok": "1",
-            "failed": "未获取到unionid"
-        }
-
-    # 2. 使用 access_token 获取用户信息
-    user_info_url = f"https://api.weixin.qq.com/sns/userinfo?access_token={token_data['access_token']}&openid={token_data['openid']}"
-    async with httpx.AsyncClient() as client:
-        response = await client.get(user_info_url)
-        user_info = response.json()
-
-    if "errcode" in user_info:
-        return {
-            "ok": "1",
-            "failed": user_info["errmsg"]
-        }
-
-    # 判断用户表是否已经存在记录
-    user = await search_unionid_sql(unionid=unionid)
-    if not user:
-        # 将privilege字段转成字符串
-        if isinstance(user_info.get("privilege"), list):
-            user_info["privilege"] = ",".join(user_info["privilege"])
-    # 创建 AddUserRequest 实例
-        add_user_request = AddUserRequest(
-            unionid=user_info.get("unionid"),  # 用户统一标识（必填）
-            openid=user_info.get("openid"),    # 普通用户的标识（必填）
-            nickname=user_info.get("nickname"),  # 普通用户昵称（可选）
-            sex=user_info.get("sex"),            # 普通用户性别，1为男性，2为女性（可选）
-            province=user_info.get("province"),  # 普通用户个人资料填写的省份（可选）
-            city=user_info.get("city"),          # 普通用户个人资料填写的城市（可选）
-            country=user_info.get("country"),    # 国家，如中国为CN（可选）
-            headimgurl=user_info.get("headimgurl"),  # 用户头像 URL（可选）
-            privilege=user_info.get("privilege"),     # 用户特权信息（可选）
-            phone=None,  # TODO 后面需要传入的参数
-            email=None  # TODO 后面需要传入的参数
-        )
-
-        # 3. 入库存储用户
-        await add_user(request=add_user_request)
-        try:
-            await insert_demo_conversation(user_info.get("unionid"))
-        except Exception as e:
-            logger.error(f"插入示例对话失败: {e}", exc_info=True)
-            return {"error": "插入示例对话失败"}
-    # 生成自身系统的 JWT Token,并存入user_token表中
-    system_token = await create_system_token(unionid=unionid, wechat_access_token=token_data['access_token'])
-
-    # 返回成功响应
-    return {
-        "ok": 0,
-        "failed": "",
-        "system_token": system_token,
-        "unionid": user_info.get("unionid"),
-        "headimgurl": user_info.get("headimgurl"),
-        "nickname": user_info.get("nickname")
-    }
-
 # chat with files
 # 存储每个会话的停止事件
 stop_events: Dict[str, asyncio.Event] = {}
