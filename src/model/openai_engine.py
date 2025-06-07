@@ -70,6 +70,8 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                 async for chunk in response.aiter_text():
                     # 检查是否停止
                     if stop_event.is_set():  # 使用 stop_event 检查
+                        yield "data: [DONE]\n\n"
+                        await response.aclose()
                         break
                     buffer += chunk  # 将新数据加入缓冲区
                     # 检查缓冲区是否包含完整的 SSE 消息（以 \n\n 结尾）
