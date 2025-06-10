@@ -177,20 +177,24 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
 #neo_antigen_research会话相关信息插入
         neo_antigen_response_text = \
 """
-## 🌟 欢迎使用 Neo 个体化 neoantigen 筛选助手 🌟
+## 🌟 欢迎使用 Neo 个体化 Neoantigen 筛选助手 🌟
 我们致力于帮助您从肿瘤相关的突变肽段中，筛选出具有潜力的个体化 neoantigen 候选，用于多肽疫苗或 mRNA 疫苗的后续设计。
 平台已内置智能流程，支持从肽段切割、MHC结合亲和力预测，到免疫原性与TCR识别能力评估的一站式分析。
 
+---
+
 ## 📥 您可以从以下方式开始：
-### • 🧬 上传您自己的突变肽段（支持FASTA格式）
-### • 🧪 点击预览并使用我们提供的示例数据进行体验
 ### • ❓ 获取引导，了解流程与所需输入内容
+### • 🧪 点击预览并使用我们提供的示例数据进行体验
+### • 🧬 上传您自己的突变肽段（支持FASTA格式）
+
 我们已为您准备了：
 ✔️ 模拟病例.txt文件
  • 👉 [PancreaticCase.txt]
 ✔️ 突变序列示例.fasta文件
  • 👉 [PancreaticSeq.fsa] 
 
+ ---
 
 ## 👉 请选择您希望的操作：
 ### • 了解预测流程与筛选逻辑
