@@ -28,15 +28,15 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
     """
     try:
         #pmhc_affinity_prediction会话
-        pmhc_conversation_id = str(uuid.uuid4())
-        pmhc_conversation = ConversationModel(
-            id=pmhc_conversation_id,
-            user_id=user_id,
-            session_title="肽段-MHC亲和力智能筛选助手",
-            chat_type="pmhc_affinity_prediction",  # config,
-            create_time=datetime.strptime(
-                "2025-03-07 14:31:00", "%Y-%m-%d %H:%M:%S")
-        )
+        # pmhc_conversation_id = str(uuid.uuid4())
+        # pmhc_conversation = ConversationModel(
+        #     id=pmhc_conversation_id,
+        #     user_id=user_id,
+        #     session_title="肽段-MHC亲和力智能筛选助手",
+        #     chat_type="pmhc_affinity_prediction",  # config,
+        #     create_time=datetime.strptime(
+        #         "2025-03-07 14:31:00", "%Y-%m-%d %H:%M:%S")
+        # )
         #patient_case_mrna_research会话
         # patient_conversation_id = str(uuid.uuid4())
         # patient_conversation = ConversationModel(
@@ -59,55 +59,55 @@ async def insert_conversation_data(session: AsyncSession, user_id: str) -> dict:
                 "2025-03-07 14:32:00", "%Y-%m-%d %H:%M:%S")
         )        
 
-        session.add_all([pmhc_conversation, neo_antigen_conversation]) 
+        session.add_all([neo_antigen_conversation]) 
 
 
 
     #pmhc_affinity_prediction会话相关信息插入
-        pmhc_response_text = \
-            """
-🌟 **欢迎来到个性化疫苗 AI 预测助手！** 🌟
-我们可以帮助您**从候选抗原序列中筛选出与MHC-I 分子结合亲和力最强的肽段**，以便更好地评估它们的免疫潜力。 
-💡 **简单操作流程**：
-✅ *1.* 提供您候选的抗原序列文件，我们将进行**默认筛选策略**的预测。
-✅ *2.* 后续您可以尝试不同的筛选策略：
-- 选择合适的HLA 分型，我们将计算不同肽段的结合能力。
-- 调整预测参数，探索不同的筛选策略。
-- 展示筛选出来的亲和力最强的肽段三维结构。
+#         pmhc_response_text = \
+#             """
+# 🌟 **欢迎来到个性化疫苗 AI 预测助手！** 🌟
+# 我们可以帮助您**从候选抗原序列中筛选出与MHC-I 分子结合亲和力最强的肽段**，以便更好地评估它们的免疫潜力。 
+# 💡 **简单操作流程**：
+# ✅ *1.* 提供您候选的抗原序列文件，我们将进行**默认筛选策略**的预测。
+# ✅ *2.* 后续您可以尝试不同的筛选策略：
+# - 选择合适的HLA 分型，我们将计算不同肽段的结合能力。
+# - 调整预测参数，探索不同的筛选策略。
+# - 展示筛选出来的亲和力最强的肽段三维结构。
 
-📥 我们提供了一个示例抗原序列文件，您可以选择使用。
-            """
+# 📥 我们提供了一个示例抗原序列文件，您可以选择使用。
+#             """
 
-        pmhc_messages = [
-            MessageModel(
-                # "04abe03e-92d0-41d1-afc6-25de0b861e6b",
-                id=str(uuid.uuid4()),
-                conversation_id=pmhc_conversation_id,
-                query="",
-                response=pmhc_response_text,
-                create_time=datetime.strptime(
-                    "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
-            ),
-        ]
-        for message in pmhc_messages:
-            session.add(message)
+#         pmhc_messages = [
+#             MessageModel(
+#                 # "04abe03e-92d0-41d1-afc6-25de0b861e6b",
+#                 id=str(uuid.uuid4()),
+#                 conversation_id=pmhc_conversation_id,
+#                 query="",
+#                 response=pmhc_response_text,
+#                 create_time=datetime.strptime(
+#                     "2025-03-07 14:30:00", "%Y-%m-%d %H:%M:%S")
+#             ),
+#         ]
+#         for message in pmhc_messages:
+#             session.add(message)
 
-        pmhc_uploaded_file = UploadedFile(
-            id=str(uuid.uuid4()),
-            conversation_id=pmhc_conversation_id,
-            file_name="testSeq.fsa",
-            file_path="minio://molly/6b5a0a9b-4dc3-420d-b53d-a4ca375c51d1_testSeq.fsa",
-            file_desc="mRNA疫苗序列分析",
-            file_type="neo_default_file",
-            file_size=411,
-            file_hash="ae840fb19516a28418991cf7f58f665b4fef79ba683f0ae9a2425197124484dd",
-            file_status=True,
-            file_origin=1,
-            create_time=datetime.strptime(
-                "2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
+#         pmhc_uploaded_file = UploadedFile(
+#             id=str(uuid.uuid4()),
+#             conversation_id=pmhc_conversation_id,
+#             file_name="testSeq.fsa",
+#             file_path="minio://molly/6b5a0a9b-4dc3-420d-b53d-a4ca375c51d1_testSeq.fsa",
+#             file_desc="mRNA疫苗序列分析",
+#             file_type="neo_default_file",
+#             file_size=411,
+#             file_hash="ae840fb19516a28418991cf7f58f665b4fef79ba683f0ae9a2425197124484dd",
+#             file_status=True,
+#             file_origin=1,
+#             create_time=datetime.strptime(
+#                 "2025-03-07 14:30:05", "%Y-%m-%d %H:%M:%S")
 
-        )
-        session.add(pmhc_uploaded_file)
+#         )
+#         session.add(pmhc_uploaded_file)
 
 # #patient_case_mrna_research会话相关信息插入
 #         patient_response_text = \
