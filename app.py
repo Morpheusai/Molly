@@ -266,7 +266,8 @@ async def backend_chat_with_files(
                 file_name=file_name,
                 file_content=file_content,
                 file_path=uploaded_file.file_path,
-                file_desc=uploaded_file.file_desc
+                file_desc=uploaded_file.file_desc,
+                file_origin=uploaded_file.file_origin
             ))
         if files:
             file_groups.append(
@@ -277,7 +278,6 @@ async def backend_chat_with_files(
             f"No files found in DB for conversation_id: {conversation_id}")
     # 更新 user_input.file_list
     user_input.file_list = file_groups
-
     logger.info(
         f"Final file_list length: {len(file_groups)} for conversation_id: {conversation_id}")
     return StreamingResponse(

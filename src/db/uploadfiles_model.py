@@ -33,7 +33,7 @@ class UploadedFile(Base):
     file_status = Column(Boolean, default=False,
                          comment='文件状态，True表示上传成功可读取，False表示不可用')
 
-    file_origin = Column(Integer, default=0, comment="文件来源：0-用户上传，1-Agent输出")
+    file_origin = Column(Integer, default=0, comment="文件来源：0-用户上传，1-系统文件")
     # 时间字段
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
 
