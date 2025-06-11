@@ -4,7 +4,6 @@ from fastapi import APIRouter, Body, HTTPException,Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from minio.error import S3Error
 from openpyxl import load_workbook
-from PyPDF2 import PdfReader
 import base64
 from io import BytesIO
 
