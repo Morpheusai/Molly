@@ -4,6 +4,8 @@ from fastapi import APIRouter, Body, HTTPException,Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from minio.error import S3Error
 from openpyxl import load_workbook
+from PyPDF2 import PdfReader
+import base64
 from io import BytesIO
 
 from src.api.protocols import DownloadFileRequest
@@ -31,15 +33,11 @@ async def display_router(
     Returns:
         str: The file content as a string.
     """
-    # 初始化 content_target
-    content_target = ""  # 默认值
 
     # 1. 验证 token
     try:
-        # 提取并校验 token
-        system_token = credentials.credentials  # 直接获取Token
-        payload = decode_vaild(system_token,
-                               SECRET_KEY, algorithms=[ALGORITHM])
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid = payload.get("sub")
         if not unionid:
             return {
@@ -53,163 +51,95 @@ async def display_router(
             "failed": f"Invalid token: {str(e)}"
         }
 
-    # bucket_netmhcpan_results = "netmhcpan-results"
-
     # 2. 解析 file_path
     file_path = request.file_path
-    if not file_path.startswith(f"minio://"):
+    if not file_path.startswith("minio://"):
         logger.error(f"Invalid file_path format: {file_path}")
         return {
             "ok": 1,
-            "failed": f"Invalid file path, expected minio://{bucket_netmhcpan_results}/..."
-        }        
+            "failed": "Invalid file path, expected minio://bucket_name/object_path"
+        }
 
-
-    # 2. 提取 bucket_name 和 object_name
     try:
-        # 去掉 minio:// 前缀
+        # 提取 bucket_name 和 object_name
         path_without_prefix = file_path[len("minio://"):]
-
-        # 找到第一个斜杠的位置，用于分割 bucket_name 和 object_name
         first_slash_index = path_without_prefix.find("/")
-
+        
         if first_slash_index == -1:
             return {
                 "ok": 1,
                 "failed": "Invalid file path format: missing bucket name or object name"
-            }        
+            }
 
-        # 提取 bucket_name 和 object_name
         bucket_name = path_without_prefix[:first_slash_index]
         object_name = path_without_prefix[first_slash_index + 1:]
+        
+        logger.info(f"Extracted bucket_name: {bucket_name}, object_name: {object_name}")
 
-        # 打印提取结果（可选）
-        logger.info(
-            f"Extracted bucket_name: {bucket_name}, object_name: {object_name}")
-
-    except Exception as e:
-        logger.error(
-            f"Failed to parse file_path: {file_path}, error: {str(e)}")
-        return {
-            "ok": 1,
-            "failed": f"Failed to parse file path: {str(e)}"
-        }
-    # 3. 从 MinIO 一次性读取文件内容
-    try:
+        # 3. 从 MinIO 获取文件
         response = minio_client.get_object(bucket_name, object_name)
-        # file_stat = minio_client.stat_object(bucket_name, object_name)
-        # file_size = file_stat.size
-
-        # 一次性读取文件内容
         file_content = response.read()
         response.close()
         response.release_conn()
 
-        # 4. 解码文件内容
-
-        if bucket_name == "netmhcpan-results":
-            # 如果 bucket_name 是 netmhcpan-results，直接返回整个文件内容
-            workbook = load_workbook(BytesIO(file_content))
-            sheet = workbook.active  # 获取第一个工作表
-
-            # 将工作表内容转换为列表
-            data = []
-            for row in sheet.iter_rows(values_only=True):
-                data.append(row)
-            content_target = "\n".join(["\t".join(
-                [str(item) if item is not None else "" for item in row]) for row in data])
-            # content_target = data
-        elif bucket_name == "esm3-results":
-            try:
-                text_content = file_content.decode("utf-8")
-            except UnicodeDecodeError:
-                logger.error(f"Failed to decode file content: {file_path}")
-                return {
-                    "ok": 1,
-                    "failed": "Failed to decode file content"
-                }
-                # 如果 bucket_name 是 esm_result，直接返回整个文件内容
-            content_target = text_content
-        elif bucket_name == "netmhcstabpan-results":
-            workbook = load_workbook(BytesIO(file_content))
-            sheet = workbook.active  # 获取第一个工作表
-
-            # 将工作表内容转换为列表
-            data = []
-            for row in sheet.iter_rows(values_only=True):
-                data.append(row)
-            content_target = "\n".join(["\t".join(
-                [str(item) if item is not None else "" for item in row]) for row in data])
-        elif bucket_name == "molly":
-            try:
-                text_content = file_content.decode("utf-8")
-
-                
-            except UnicodeDecodeError:
-                logger.error(f"Failed to decode file content: {file_path}")
-                return {
-                    "ok": 1,
-                    "failed": "Failed to decode file content"
-                }
-                # 如果 bucket_name 是 esm_result，直接返回整个文件内容
-            content_target = text_content   
-        elif bucket_name == "extract-peptide-results":
-            try:
-                text_content = file_content.decode("utf-8")
-            except UnicodeDecodeError:
-                logger.error(f"Failed to decode file content: {file_path}")
-                return {
-                    "ok": 1,
-                    "failed": "Failed to decode file content"
-                }
-            content_target = text_content
-        elif bucket_name == "rnaplot-results":
-            try:
-                # SVG 文件是文本格式，直接解码为 UTF-8
-                svg_content = file_content.decode("utf-8")
-                content_target = svg_content
-            except UnicodeDecodeError:
-                logger.error(f"Failed to decode SVG file: {file_path}")
-                return {
-                    "ok": 1,
-                    "failed": "Failed to decode SVG file"
-                }
-        elif bucket_name == "rnafold-results":
-            try:
-                # txt 文件是文本格式，直接解码为 UTF-8
-                txt_content = file_content.decode("utf-8")
-                content_target = txt_content
-            except UnicodeDecodeError:
-                logger.error(f"Failed to decode SVG file: {file_path}")
-                return {
-                    "ok": 1,
-                    "failed": "Failed to decode SVG file"
-                }
-        else:
-            # 如果 bucket_name 不是上述两种情况，可以抛出异常或设置默认值
-            logger.error(f"Unsupported bucket name: {bucket_name}")
-            return {
-                "ok": 1,
-                "failed": f"Unsupported bucket name: {bucket_name}"
-            }
+        # 4. 根据文件扩展名处理不同文件类型
+        file_extension = object_name.lower().split('.')[-1] if '.' in object_name else ''
         
-        # 6. 直接返回内容
+        
+        if file_extension in ['xlsx', 'xls']:
+            # 处理Excel文件
+            workbook = load_workbook(BytesIO(file_content))
+            sheet = workbook.active
+            data = []
+            for row in sheet.iter_rows(values_only=True):
+                data.append(row)
+            content = "\n".join(["\t".join(
+                [str(item) if item is not None else "" for item in row]) for row in data])
+        
+        elif file_extension == 'pdf':
+            # 返回PDF原始内容（包括二进制数据）
+            content = base64.b64encode(file_content).decode('utf-8')
+
+        
+        elif file_extension in ['txt', 'csv', 'log', 'json', 'xml', 'svg', 'html']:
+            # 处理文本文件
+            try:
+                content = file_content.decode('utf-8')
+            except UnicodeDecodeError:
+                # 尝试其他编码
+                try:
+                    content = file_content.decode('gbk')
+                except Exception as e:
+                    logger.error(f"Failed to decode text file: {str(e)}")
+                    return {
+                        "ok": 1,
+                        "failed": f"Failed to decode text file: {str(e)}"
+                    }
+        
+        elif file_extension in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
+            # 处理图片文件 - 返回Base64编码
+            content = base64.b64encode(file_content).decode('utf-8')
+        
+        else:
+            # 默认处理为二进制文件或未知类型
+            content = base64.b64encode(file_content).decode('utf-8')
+
+        # 5. 返回响应
         return DisplayResponse(
             ok=0,
             failed="",
-            content_target=content_target
+            content_target=content,
         )
 
     except S3Error as minio_error:
-        logger.error(
-            f"MinIO download failed for {object_name}: {str(minio_error)}")
+        logger.error(f"MinIO download failed: {str(minio_error)}")
         return {
             "ok": 1,
             "failed": f"File not found: {str(minio_error)}"
         }
     except Exception as e:
-        logger.error(f"Unexpected error downloading {file_path}: {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}")
         return {
             "ok": 1,
-            "failed": f"Download failed: {str(e)}"
+            "failed": f"Processing failed: {str(e)}"
         }
