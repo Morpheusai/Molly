@@ -100,7 +100,7 @@ async def display_router(
             content = base64.b64encode(file_content).decode('utf-8')
 
         
-        elif file_extension in ['txt', 'csv', 'log', 'json', 'xml', 'svg', 'html']:
+        elif file_extension in ['txt', 'csv', 'log', 'json', 'xml', 'svg', 'html','fsa','fsa','fsata','fasta']:
             # 处理文本文件
             try:
                 content = file_content.decode('utf-8')
