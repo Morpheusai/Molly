@@ -111,3 +111,10 @@ async def reset_conversation(
         request: ResetConversationRequest = Body(...)
 ):
         return await reset_conversation_sql(session,credentials,request)
+
+#删除文件
+async def delete_uploadfiles(
+        # credentials: HTTPAuthorizationCredentials = Depends(security),
+        request: DeleteFileRequest = Body(...)
+):
+        return await delete_uploadfiles_sql(request)

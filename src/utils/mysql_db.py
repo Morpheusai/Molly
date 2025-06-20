@@ -886,7 +886,7 @@ async def update_uploadfiles_file_type_sql(
                 UploadedFile.file_path.in_(file_paths),
                 UploadedFile.conversation_id == conversation_id
             )
-            .values(file_type="application/octet-stream")
+            .values(file_type="uploaded_neo_default_file")
         )
         
         await session.execute(stmt)
@@ -1128,3 +1128,50 @@ async def reset_conversation_sql(
     except Exception as e:
         await session.rollback()
         return BaseResponse(ok=1, failed=f"系统错误: {e}")
+    
+@with_async_session    
+async def delete_uploadfiles_sql(
+    session: AsyncSession,
+    # credentials: HTTPAuthorizationCredentials,
+    request: DeleteFileRequest
+):     
+    try:
+        # # 提取并校验 token
+        # system_token = credentials.credentials
+        # payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        # unionid: str = payload.get("sub")
+        # if unionid is None:
+        #     return BaseResponse(ok=1, failed="unionid不存在") 
+        
+
+        # 先批量删除其他记录
+        delete_stmt = (
+            delete(UploadedFile)
+            .where(
+                UploadedFile.conversation_id == request.conversation_id,
+                UploadedFile.file_path.in_(request.file_path),
+                UploadedFile.file_type != "uploaded_neo_default_file"
+            )
+        )
+        await session.execute(delete_stmt)
+
+        # 然后处理需要更新的记录（file_type = 'uploaded_neo_default_file'）
+        update_stmt = (
+            update(UploadedFile)
+            .where(
+                UploadedFile.conversation_id == request.conversation_id,
+                UploadedFile.file_path.in_(request.file_path),
+                UploadedFile.file_type == "uploaded_neo_default_file"
+            )
+            .values(file_type="neo_default_file")
+        )
+        await session.execute(update_stmt)
+        
+
+        
+        await session.commit()
+        return BaseResponse(ok=0, data="文件删除成功")
+        
+    except Exception as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=f"操作失败: {e}")

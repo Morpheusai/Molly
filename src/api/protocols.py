@@ -179,3 +179,8 @@ class MigrateFileRequest(BaseModel):
     
 class ResetConversationRequest(BaseModel):
     conversation_id: str
+
+#删除文件请求
+class DeleteFileRequest(BaseModel):
+    conversation_id: str
+    file_path: List[str]
