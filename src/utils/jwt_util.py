@@ -8,7 +8,7 @@ from jose import JWTError, jwt
 from sqlalchemy.future import select
 
 from src.api.protocols import BaseResponse
-from src.db.user_token_model import UserToken
+from src.db.user_token_model import UserTokenModel
 from src.utils.session import with_async_session
 
 load_dotenv()
@@ -31,7 +31,7 @@ async def create_system_token(session, unionid: str, wechat_access_token: str):
 
     # 查询是否已存在该 unionid 的记录
     existing_token = await session.execute(
-        select(UserToken).where(UserToken.unionid == unionid)
+        select(UserTokenModel).where(UserTokenModel.unionid == unionid)
     )
     existing_token = existing_token.scalar_one_or_none()
 
@@ -43,7 +43,7 @@ async def create_system_token(session, unionid: str, wechat_access_token: str):
         existing_token.updata_time = datetime.now()
     else:
         # 如果不存在，创建新记录
-        db_token = UserToken(
+        db_token = UserTokenModel(
             id=str(uuid.uuid4()),
             unionid=unionid,
             wechat_access_token=wechat_access_token,

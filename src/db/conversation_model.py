@@ -1,39 +1,15 @@
-from sqlalchemy import Column, String, CHAR, DateTime, ForeignKey, func
+from sqlalchemy import Column, BigInteger, Integer, String, TIMESTAMP, SmallInteger, ForeignKey, text
 from sqlalchemy.orm import relationship
-
 from src.utils.base import Base
 
 class ConversationModel(Base):
-    __tablename__ = 'conversation'
+    __tablename__ = 'conversations'
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='对话ID')
+    patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False, comment='附属病历id')
+    type = Column(String(50), comment='类型')
+    title = Column(String(255), comment='对话标题，可自动生成')
+    is_deleted = Column(SmallInteger, default=0, comment='是否删除（伪删除）')
+    create_time = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=False, comment='创建时间')
 
-    # 主键字段
-    id = Column(CHAR(36), primary_key=True, comment='会话ID')
-
-    # 外键字段
-    user_id = Column(String(255), ForeignKey(
-        'user.unionid'), comment='微信用户unionid')
-
-    # 会话信息字段
-    session_title = Column(String(255), comment='会话标题')
-
-    # 聊天类型字段
-    chat_type = Column(String(50), default="normal", comment="聊天类型")
-
-    # 时间字段
-    updata_time = Column(DateTime, default=func.now(),
-                         comment='更新时间')  # TODO 更新时间
-
-    create_time = Column(DateTime, default=func.now(), comment='创建时间')
-
-    # 关系字段
-    users = relationship('UserModel', back_populates='conversations')
-
-    messages = relationship('MessageModel', back_populates='conversations')
-
-    uploaded_files = relationship(
-        'UploadedFile', back_populates='conversation')
-
-    tools = relationship('ToolModel', back_populates='conversations')
-
-    def __repr__(self):
-        return f"<Conversation(id='{self.id}', user_id='{self.user_id}', session_title='{self.session_title}')>"
+    patient = relationship('PatientModel', back_populates='conversations')
+    messages = relationship('MessageModel', back_populates='conversation', cascade='all, delete-orphan') 

@@ -8,7 +8,7 @@ from typing import AsyncGenerator, List, Dict
 
 from src.api.protocols import UserInput
 from src.config import g_config
-from src.utils.mysql_db import process_messages
+# from src.utils.mysql_db import process_messages
 from src.utils.log import logger
 
 
@@ -23,7 +23,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
         target_url = g_config["url"]["target_pmhc_affinity_prediction_stream_url"]
     elif user_input.conversation_chat_type == "patient_case_mrna":
         target_url = g_config["url"]["target_patient_case_mrna_stream_url"]     
-    elif user_input.conversation_chat_type == "neo_antigen":
+    elif user_input.conversation_chat_type == "target_predict_neo_antigen_stream_stream_url":
         target_url = g_config["url"]["target_neo_antigen_stream_stream_url"]              
     # 构造请求参数
     json_data = user_input.dict()
@@ -195,7 +195,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                 # tool_result_analysis_list+=current_response
 
     # 处理消息
-    await process_messages(msg_id, conversation_id, ai_messages, tool_messages, tool_result_analysis_list, msg_response, tool_middle_result)
+    # await process_messages(msg_id, conversation_id, ai_messages, tool_messages, tool_result_analysis_list, msg_response, tool_middle_result)
 
 #data: {"type": "writer_token", 
 #       "content": "{\"type\": \"link\", \"url\": {\"rnaflod_result_file_url\": \"minio://rnafold-results/65c27f5cc37644cfa681507ba375d611_RNAFold_results.xlsx\", \"sequence_0002_ss\": \"minio://rnaplot-results/2f024614521548eeb211c21e21449b2f_svg_file.svg\", \"sequence_0001_ss\": \"minio://rnaplot-results/51d00ab44bce452186457caa75bbda66_svg_file.svg\"}, \"content\": \"\"}"}

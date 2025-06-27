@@ -1,39 +1,18 @@
-from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey, func, CHAR, Text
-from sqlalchemy.dialects.mysql import MEDIUMTEXT
+from sqlalchemy import Column, BigInteger, Integer, Enum, Text, JSON, SmallInteger, TIMESTAMP, ForeignKey, text
 from sqlalchemy.orm import relationship
-
 from src.utils.base import Base
 
-
 class MessageModel(Base):
-    """
-    聊天记录模型，表示会话中的一条聊天记录
-    """
-    __tablename__ = 'message'
-    id = Column(CHAR(36), primary_key=True, comment='聊天记录ID')
+    __tablename__ = 'messages'
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='消息ID')
+    conversation_id = Column(BigInteger, ForeignKey('conversations.id'), nullable=False, comment='附属会话id')
+    type = Column(Enum('user', 'assistant'), nullable=False, comment='消息类型')
+    content = Column(Text, nullable=False, comment='内容')
+    meta_data = Column(JSON, comment='元数据')
+    feedback_like = Column(Integer, comment='点赞数')
+    feedback_dislike = Column(Integer, comment='点踩数')
+    is_deleted = Column(SmallInteger, default=0, comment='是否删除')
+    create_time = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=False, comment='创建时间')
 
-    conversation_id = Column(CHAR(36), ForeignKey(
-        'conversation.id'), comment='会话ID')
-
-    query = Column(Text, comment='用户问题')
-
-    response = Column(MEDIUMTEXT, comment='模型回答') 
-   
-    create_time = Column(DateTime, default=func.now(), comment='创建时间')
-
-    # 记录知识库id等，以便后续扩展
-    meta_data = Column(JSON, default={})
-
-    # 满分100 越高表示评价越好
-    feedback_score = Column(Integer, default=-1, comment="用户评分")
-    feedback_reason = Column(String(255), default="", comment="用户评分理由")
-
-    conversations = relationship(
-        'ConversationModel', back_populates='messages')
-
-    # 关联到 ToolModel，并指定按 create_time 升序排序
-    tools = relationship('ToolModel', back_populates='message',
-                         order_by='ToolModel.create_time')
-
-    def __repr__(self):
-        return f"<Message(id='{self.id}', chat_type='{self.chat_type}', query='{self.query}', response='{self.response}', meta_data='{self.meta_data}', feedback_score='{self.feedback_score}', feedback_reason='{self.feedback_reason}', create_time='{self.create_time}')>"
+    conversation = relationship('ConversationModel', back_populates='messages')
+    questions = relationship('QuestionModel', back_populates='message', cascade='all, delete-orphan') 

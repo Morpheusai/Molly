@@ -9,7 +9,9 @@
         "target_pmhc_affinity_prediction_stream_url":"http://47.237.170.62:60718/pmhc_affinity_prediction_stream",
         "target_patient_case_mrna_stream_url":"http://47.237.170.62:60718/patient_case_mrna_stream",
         "target_neo_antigen_stream_stream_url":"http://47.237.170.62:60718/neo_antigen_stream",
-        "target_desc_url":"http://47.237.170.62:60718/description"
+        "target_predict_neo_antigen_stream_stream_url":"http://47.237.170.62:60718/predict_neo_antigen_stream",
+        "target_desc_url":"http://47.237.170.62:60718/description",
+        "target_extract_patient_info_url":"http://47.237.170.62:60718/extract_patient_info"
     },
     "temp":{
         "upload_files_dir":"/mnt/tmp/upload",

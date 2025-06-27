@@ -1,41 +1,29 @@
-from sqlalchemy import Column, String, DateTime, func, Integer
+from sqlalchemy import Column, String, Enum, Boolean, TIMESTAMP, ForeignKey, func, text
 from sqlalchemy.orm import relationship
-
 from src.utils.base import Base
 
-
 class UserModel(Base):
-    __tablename__ = 'user'
+    __tablename__ = 'users'
+    unionid = Column(String(128), primary_key=True, comment='微信UnionID，主键')
+    openid = Column(String(128), unique=True, nullable=False, comment='微信OpenID，唯一')
+    role = Column(Enum('chief', 'assistant'), nullable=False, comment='角色（主任医师/助手）')
+    is_active = Column(Boolean, default=True, comment='是否可用')
+    nickname = Column(String(64), comment='昵称')
+    phone = Column(String(20), comment='手机号')
+    email = Column(String(100), comment='邮箱')
+    city = Column(String(64), comment='城市')
+    province = Column(String(64), comment='省份')
+    country = Column(String(64), comment='国家')
+    headimgurl = Column(String(512), comment='头像url')
+    created_by = Column(String(128), ForeignKey('users.unionid'), comment='创建者ID，主任医师创建助手时记录')
+    created_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"), comment='创建时间')
+    updated_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"), comment='更新时间')
 
-    unionid = Column(String(128), primary_key=True,
-                     comment='用户统一标识。针对一个微信开放平台账号下的应用，同一用户的unionid是唯一的')
-
-    openid = Column(String(128), unique=True, nullable=False,
-                    comment='普通用户的标识，对当前开发者账号唯一')
-
-    nickname = Column(String(64), comment='普通用户昵称')
-
-    sex = Column(Integer, comment='普通用户性别，1为男性，2为女性')
-
-    province = Column(String(64), comment='普通用户个人资料填写的省份')
-
-    city = Column(String(64), comment='普通用户个人资料填写的城市')
-
-    country = Column(String(64), comment='国家，如中国为CN')
-
-    headimgurl = Column(String(512), comment='用户头像，最后一个数值代表正方形头像大小')
-
-    privilege = Column(
-        String(512), comment='用户特权信息，json数组，如微信沃卡用户为（chinaunicom）')
-
-    phone = Column(String(20), comment='用户手机号')
-
-    email = Column(String(128), comment='用户邮箱')
-
-    create_time = Column(DateTime, default=func.now(), comment='创建时间')
-
-    # 关系字段
-    conversations = relationship('ConversationModel', back_populates='users')
-
-    def __repr__(self):
-        return f"<unionid='{self.unionid}', User( openid='{self.openid}', nickname='{self.nickname}', sex={self.sex}, province='{self.province}', city='{self.city}', country='{self.country}', headimgurl='{self.headimgurl}', privilege={self.privilege}, )>"
+    # 关系同前
+    created_users = relationship('UserModel', remote_side=[unionid], backref='creator', foreign_keys=[created_by])
+    user_tokens = relationship('UserTokenModel', back_populates='user', cascade='all, delete-orphan')
+    projects = relationship('ProjectModel', back_populates='creator', cascade='all, delete-orphan')
+    patients = relationship('PatientModel', back_populates='creator', cascade='all, delete-orphan')
+    files = relationship('FileModel', back_populates='uploader', cascade='all, delete-orphan')
+    workflows_started = relationship('WorkflowModel', foreign_keys='WorkflowModel.started_by', back_populates='starter')
+    workflows_completed = relationship('WorkflowModel', foreign_keys='WorkflowModel.completed_by', back_populates='completer') 
