@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any,Literal
+from pydantic import validator
 
 
 
@@ -152,6 +153,37 @@ class UserInput(BaseModel):
     file_list: List[FileGroup] = Field(description="传入文件列表", default=[])
     conversation_chat_type: str = Field(description="会话聊天类型", default="normal")
 
+
+class CustomPredictUserInputRequest(BaseModel):
+    """用户自定义参数的请求类，包含必填字段验证"""
+    patient_id: str = Field(description="病人id")
+    parameters: dict[str, Any] = Field(
+        description="预测参数，必须包含netchop且其中必须包含input_filename",
+        examples=[{
+            "netchop": {
+                "input_filename": "minio://molly/4aa36c4a-dba3-4640-b2f7-dc2b6fd2662b.fasta"
+            }
+        }]
+    )
+
+    @validator('parameters')
+    def validate_parameters(cls, v):
+        """验证parameters中必须包含netchop且其中必须包含input_filename"""
+        if not isinstance(v, dict):
+            raise ValueError('parameters必须是字典类型')
+        
+        if 'netchop' not in v:
+            raise ValueError('parameters中必须包含netchop字段')
+            
+        netchop = v.get('netchop')
+        if not isinstance(netchop, dict):
+            raise ValueError('netchop必须是字典类型')
+            
+        if 'input_filename' not in netchop:
+            raise ValueError('netchop中必须包含input_filename字段')
+            
+        return v
+
 class PredictUserInputRequest(BaseModel):
     """Basic user input for the agent."""
     patient_id: str = Field(description="病人id")
@@ -161,6 +193,36 @@ class PredictUserInputRequest(BaseModel):
         examples=["minio://molly/6e461c0b-876c-4a98-9e7e-a743ec71c7b0_bigmhc_el.fasta"],
     )
     conversation_chat_type: str = Field(description="会话聊天类型", default="normal")
+    parameters: dict[str, Any] = Field(
+        description="预测参数",
+        default={},
+        examples=[
+            {
+                "netchop": {
+                    "cleavage_site_threshold": 0.5,
+                    "model": 0,
+                    "format": 0,
+                    "strict": 0
+                },
+                "netctlpan": {
+                    "peptide_length": -1 ,
+                    "weight_of_tap": 0.025,
+                    "weight_of_clevage": 0.225,
+                    "epi_threshold": 1.0,
+                    "output_threshold": -99.9,
+                    "sort_by": -1
+                },
+                "netmhcpan": { 
+                    "peptide_length": -1 ,
+                    "high_threshold_of_bp": 0.5,
+                    "low_threshold_of_bp": 2.0,
+                    "rank_cutoff": -99.9,
+                },
+                "bigmhc_im": {
+                }
+            }
+        ]
+    )
 
 class PredictUserInputAgentRequest(BaseModel):
     prompt: str = Field(
@@ -189,8 +251,38 @@ class PredictUserInputAgentRequest(BaseModel):
         examples=[["CASSIRSSYEQYF", "CASSLGQGAEAFF"]],
         default=None,
     )
-
     conversation_chat_type: str = Field(description="会话聊天类型", default="predict_neo_antigen")
+
+    parameters: dict[str, Any] = Field(
+    description="预测参数",
+    default={},
+    examples=[
+        {
+            "netchop": {
+                "cleavage_site_threshold": 0.5,
+                "model": 0,
+                "format": 0,
+                "strict": 0
+            },
+            "netctlpan": {
+                "peptide_length": -1 ,
+                "weight_of_tap": 0.025,
+                "weight_of_clevage": 0.225,
+                "epi_threshold": 1.0,
+                "output_threshold": -99.9,
+                "sort_by": -1
+            },
+            "netmhcpan": { 
+                "peptide_length": -1 ,
+                "high_threshold_of_bp": 0.5,
+                "low_threshold_of_bp": 2.0,
+                "rank_cutoff": -99.9,
+            },
+            "bigmhc_im": {
+            }
+        }
+    ]
+)
 
 
 #文件下载请求
@@ -398,10 +490,11 @@ class WorkflowStatusInfo(BaseModel):
     """工作流状态信息模型"""
     stage: str
     status: str
+    rank: int
 
 class GetWorkflowStatusResponse(BaseResponse):
     """获取工作流状态响应模型"""
-    data: Optional[WorkflowStatusInfo] = None
+    data: Optional[List[WorkflowStatusInfo]] = None
 
 class PredictionDetailItem(BaseModel):
     rank: int
@@ -570,3 +663,4 @@ class ToolInputOutputRequest(BaseModel):
 class ToolInputOutputResponse(BaseResponse):
     """工具输入输出响应模型"""
     predict_detail_id: Optional[int] = Field(None, description="预测详情ID")
+

@@ -118,19 +118,20 @@ async def upload_attachments(
     # 如果上传成功，更新工作流状态
     if not has_errors:
         async with AsyncSessionLocal() as session:
-            # 查找最新的工作流记录
+            # 查找对应stage的工作流记录（测序数据阶段，rank=2）
             result = await session.execute(
                 select(WorkflowModel)
                 .where(WorkflowModel.patient_id == int(patient_id))
-                .order_by(WorkflowModel.id.desc())
+                .where(WorkflowModel.stage == '测序数据')
+                .where(WorkflowModel.rank == 2)
             )
             workflow = result.scalar_one_or_none()
             
             if workflow:
-                workflow.stage = '新抗原预测'
-                workflow.status = 'new'
+                workflow.status = 'completed'
+                workflow.completed_at = func.now()
                 await session.commit()
-                logger.info(f"Workflow for patient {patient_id} updated to stage '新抗原预测'")
+                logger.info(f"Workflow for patient {patient_id} stage '测序数据' (rank=2) completed")
 
     if has_errors:
         response["ok"] = 1

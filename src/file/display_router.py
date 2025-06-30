@@ -86,14 +86,8 @@ async def display_router(
         
         
         if file_extension in ['xlsx', 'xls']:
-            # 处理Excel文件
-            workbook = load_workbook(BytesIO(file_content))
-            sheet = workbook.active
-            data = []
-            for row in sheet.iter_rows(values_only=True):
-                data.append(row)
-            content = "\n".join(["\t".join(
-                [str(item) if item is not None else "" for item in row]) for row in data])
+            # 处理Excel文件 - 返回Base64编码的二进制数据
+            content = base64.b64encode(file_content).decode('utf-8')
         
         elif file_extension == 'pdf':
             # 返回PDF原始内容（包括二进制数据）

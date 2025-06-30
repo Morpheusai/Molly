@@ -13,7 +13,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.api.api import (
     add_user,
     create_medical_records,
@@ -28,7 +27,7 @@ from src.api.api import (
     get_patient_prediction_details,
     handle_tool_input_output
 )
-from src.api.protocols import UserInput, AddUserRequest, PredictUserInputRequest, PredictUserInputAgentRequest
+from src.api.protocols import UserInput, AddUserRequest, PredictUserInputRequest, PredictUserInputAgentRequest,CustomPredictUserInputRequest
 # from src.db.uploadfiles_model import UploadedFile
 from src.db.conversation_model import ConversationModel
 from src.db.patient_model import PatientModel
@@ -43,8 +42,8 @@ from src.file.markdown_download_router import router as markdown_download_file
 from src.model.predict_openai_engine import predict_proxy_stream_generator
 from src.utils import logger
 from src.utils.jwt_util import create_system_token, decode_vaild
-from src.utils.mysql_db import search_unionid_sql, insert_message_sql
-from src.utils.session import get_async_db
+from src.utils.mysql_db import search_unionid_sql, insert_message_sql,get_conversation_id_by_patient_and_type_sql
+from src.utils.session import get_async_db, AsyncSessionLocal
 # from src.utils.weblogo_generate import router as weblogo_generate
 
 
@@ -277,6 +276,13 @@ async def backend_chat_with_files(
 
             user_input = PredictUserInputRequest(**body)
             logger.info(f"Validated model: {user_input.dict()}")
+            
+            # 判断前端是否传了parameters参数
+            if 'parameters' not in body:
+                logger.info("前端未传入parameters参数，将使用默认参数")
+            else:
+                logger.info(f"前端传入了parameters参数: {user_input.parameters}")
+                
         except json.JSONDecodeError as e:
             logger.error(f"JSON解析失败: {str(e)}")
             return await generate_error_response("Invalid JSON format")
@@ -326,10 +332,12 @@ async def backend_chat_with_files(
         await insert_message_sql(conversation_id=conversation_id, type='user',content="开始预测")
         
         # 6. 更新工作流状态为pending
+        # 查找对应stage的工作流记录（新抗原预测阶段，rank=3）
         workflow = await db.execute(
             select(WorkflowModel)
             .where(WorkflowModel.patient_id == int(patient_id))
-            .order_by(WorkflowModel.id.desc())
+            .where(WorkflowModel.stage == '新抗原预测')
+            .where(WorkflowModel.rank == 3)
         )
         workflow = workflow.scalar_one_or_none()
         if workflow:
@@ -338,22 +346,42 @@ async def backend_chat_with_files(
         
         # === 关键：predict_id 一定用新建的 prediction_id ===
         agent_request = PredictUserInputAgentRequest(
-            prompt="开始预测",
+            prompt="使用默认参数，开始预测",
             conversation_id=str(conversation_id),
             patient_id=str(patient_id),
             predict_id=prediction_id,
             file_path=user_input.file_path,
             mhc_allele=mhc_allele,
-            cdr3=cdr3
+            cdr3=cdr3,
+            parameters=user_input.parameters
         )
 
         # 定义完成回调
         async def on_complete():
-            if workflow:
-                workflow.status = 'completed'
-                workflow.completed_at = func.now()
-                workflow.completed_by = unionid
-                await db.commit()
+            try:
+                logger.info(f"开始执行on_complete回调，patient_id: {patient_id}")
+                # 重新查询工作流记录
+                workflow_result = await db.execute(
+                    select(WorkflowModel)
+                    .where(WorkflowModel.patient_id == int(patient_id))
+                    .where(WorkflowModel.stage == '新抗原预测')
+                    .where(WorkflowModel.rank == 3)
+                )
+                workflow_record = workflow_result.scalar_one_or_none()
+                
+                if workflow_record:
+                    logger.info(f"找到工作流记录，当前状态: {workflow_record.status}")
+                    workflow_record.status = 'completed'
+                    workflow_record.completed_at = func.now()
+                    workflow_record.completed_by = unionid
+                    logger.info(f"设置状态为completed，准备提交...")
+                    await db.commit()
+                    logger.info(f"数据库提交完成")
+                    logger.info(f"工作流状态已更新为completed，patient_id: {patient_id}")
+                else:
+                    logger.warning(f"未找到工作流记录，patient_id: {patient_id}")
+            except Exception as e:
+                logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
         
         # 7. 返回流式响应
         return StreamingResponse(
@@ -369,6 +397,161 @@ async def backend_chat_with_files(
     except Exception as e:
         logger.exception("处理请求时发生未捕获的异常:")
         return await generate_error_response(str(e))
+
+#用户自定义参数工具预测接口
+@app.post("/backend/predict_antigen_with_custom_params")
+async def predict_antigen_with_custom_params(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_async_db)
+) -> StreamingResponse:
+    """用户自定义参数工具预测接口，支持文件上传信息，流式转发到目标服务器"""
+
+    async def generate_error_response(error_msg: str):
+        """生成错误响应的辅助函数"""
+        error_data = json.dumps({
+            "type": "error",
+            "content": error_msg
+        })
+        return StreamingResponse(
+            iter([f"data: {error_data}\n\n"]),
+            media_type="text/event-stream"
+        )
+
+    try:
+        # 1. 解析和验证请求
+        try:
+            raw_body = await request.body()
+            logger.info(f"Raw request body: {raw_body.decode('utf-8')}")
+
+            body = await request.json()
+            logger.info(f"Parsed JSON body: {json.dumps(body, ensure_ascii=False)}")
+
+            user_input = CustomPredictUserInputRequest(**body)
+            logger.info(f"Validated model: {user_input.dict()}")
+            
+            # 判断前端是否传了parameters参数
+            if 'parameters' not in body:
+                logger.info("前端未传入parameters参数，将使用默认参数")
+            else:
+                logger.info(f"前端传入了parameters参数: {user_input.parameters}")
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON解析失败: {str(e)}")
+            return await generate_error_response("Invalid JSON format")
+        except ValidationError as e:
+            logger.error(f"模型验证失败: {e.errors()}")
+            return await generate_error_response(str(e.errors()))
+
+        # 2. 验证token
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            return await generate_error_response("unionid不存在")
+
+        # 3. 通过conversation_id查找会话和病人
+        conversation_id = await get_conversation_id_by_patient_and_type_sql(int(user_input.patient_id), "predict_neo_antigen")
+        patient_id = user_input.patient_id
+        conversation = await db.get(ConversationModel, int(conversation_id))
+        if not conversation:
+            return await generate_error_response("会话不存在")
+        patient = await db.get(PatientModel, int(patient_id))
+        if not patient:
+            return await generate_error_response("病人信息不存在")
+
+        # === 新增：始终新建PredictionModel ===
+        
+        new_prediction = PredictionModel(
+            patient_id=patient_id,
+            result=None,
+            summary=None
+        )
+        db.add(new_prediction)
+        await db.commit()
+        await db.refresh(new_prediction)
+        prediction_id = new_prediction.id
+
+        # 4. 处理HLA和CDR数据
+        mhc_allele = None
+        if patient.HLA_type:
+            mhc_allele = patient.HLA_type
+
+        cdr3 = []
+        if patient.CDR_type:
+            cdr3 = [cdr.strip() for cdr in patient.CDR_type.split(',') if cdr.strip()]
+
+        # 5. 先插入一条用户消息
+        await insert_message_sql(conversation_id=conversation_id, type='user',content="开始预测")
+        
+        # 6. 更新工作流状态为pending
+        # 查找对应stage的工作流记录（新抗原预测阶段，rank=3）
+        workflow = await db.execute(
+            select(WorkflowModel)
+            .where(WorkflowModel.patient_id == int(patient_id))
+            .where(WorkflowModel.stage == '新抗原预测')
+            .where(WorkflowModel.rank == 3)
+        )
+        workflow = workflow.scalar_one_or_none()
+        if workflow:
+            workflow.status = 'pending'
+            await db.commit()
+        
+        # === 关键：predict_id 一定用新建的 prediction_id ===
+        agent_request = PredictUserInputAgentRequest(
+            prompt="完成自定义参数收集，开始预测",
+            conversation_id=str(conversation_id),
+            patient_id=str(patient_id),
+            predict_id=prediction_id,
+            file_path=user_input.parameters['netchop']['input_filename'],
+            mhc_allele=mhc_allele,
+            cdr3=cdr3,
+            parameters=user_input.parameters
+        )
+
+        # 定义完成回调
+        async def on_complete():
+            try:
+                logger.info(f"开始执行on_complete回调，patient_id: {patient_id}")
+                # 重新查询工作流记录
+                workflow_result = await db.execute(
+                    select(WorkflowModel)
+                    .where(WorkflowModel.patient_id == int(patient_id))
+                    .where(WorkflowModel.stage == '新抗原预测')
+                    .where(WorkflowModel.rank == 3)
+                )
+                workflow_record = workflow_result.scalar_one_or_none()
+                
+                if workflow_record:
+                    logger.info(f"找到工作流记录，当前状态: {workflow_record.status}")
+                    workflow_record.status = 'completed'
+                    workflow_record.completed_at = func.now()
+                    workflow_record.completed_by = unionid
+                    logger.info(f"设置状态为completed，准备提交...")
+                    await db.commit()
+                    logger.info(f"数据库提交完成")
+                    logger.info(f"工作流状态已更新为completed，patient_id: {patient_id}")
+                else:
+                    logger.warning(f"未找到工作流记录，patient_id: {patient_id}")
+            except Exception as e:
+                logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
+        
+        # 7. 返回流式响应
+        return StreamingResponse(
+            predict_proxy_stream_generator(agent_request, conversation_id, on_complete),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*"
+            }
+        )
+
+    except Exception as e:
+        logger.exception("处理请求时发生未捕获的异常:")
+        return await generate_error_response(str(e))
+
+
 
 
 app.include_router(upload_router, prefix="/backend")

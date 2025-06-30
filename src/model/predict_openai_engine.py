@@ -203,7 +203,12 @@ async def predict_proxy_stream_generator(
     
     # 调用完成回调
     if on_complete:
-        await on_complete()
+        logger.info("开始调用on_complete回调函数")
+        try:
+            await on_complete()
+            logger.info("on_complete回调函数执行成功")
+        except Exception as e:
+            logger.error(f"on_complete回调函数执行失败: {e}", exc_info=True)
 
 #data: {"type": "writer_token", 
 #       "content": "{\"type\": \"link\", \"url\": {\"rnaflod_result_file_url\": \"minio://rnafold-results/65c27f5cc37644cfa681507ba375d611_RNAFold_results.xlsx\", \"sequence_0002_ss\": \"minio://rnaplot-results/2f024614521548eeb211c21e21449b2f_svg_file.svg\", \"sequence_0001_ss\": \"minio://rnaplot-results/51d00ab44bce452186457caa75bbda66_svg_file.svg\"}, \"content\": \"\"}"}

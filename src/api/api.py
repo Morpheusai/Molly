@@ -12,7 +12,7 @@ from src.utils.jwt_util import decode_vaild
 from src.utils import logger
 from src.api.protocols import  CreateConversationRequest, CreateConversationResponse, PredictionDetailListResponse, PredictionDetailItem
 from src.utils.mysql_db import create_conversation_sql, get_conversation_id_by_patient_and_type_sql
-from src.db import PatientModel
+from src.db import PatientModel, WorkflowModel
 from fastapi import APIRouter
 
 
@@ -150,14 +150,27 @@ async def create_medical_records(
         
         # 如果创建病历成功，创建工作流记录
         if result.ok == 0 and result.patient_id:
-            workflow = WorkflowModel(
-                patient_id=result.patient_id,
-                stage='测序数据',
-                status='new',
-                started_by=unionid,
-                started_at=func.now()
-            )
-            session.add(workflow)
+            # 创建3个不同stage的工作流记录
+            workflow_stages = [
+                {'stage': '病历上传', 'rank': 1, 'status': 'completed'},
+                {'stage': '测序数据', 'rank': 2, 'status': 'new'},
+                {'stage': '新抗原预测', 'rank': 3, 'status': 'new'}
+            ]
+            workflows = []
+            
+            for stage_info in workflow_stages:
+                workflow = WorkflowModel(
+                    patient_id=result.patient_id,
+                    stage=stage_info['stage'],
+                    rank=stage_info['rank'],
+                    status=stage_info['status'],
+                    started_by=unionid,
+                    started_at=func.now()
+                )
+                workflows.append(workflow)
+            
+            # 批量添加所有工作流记录
+            session.add_all(workflows)
             await session.commit()
             
         return result
@@ -413,7 +426,7 @@ async def get_workflow_status(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> GetWorkflowStatusResponse:
     """
-    获取指定病人的最新工作流状态
+    获取指定病人的所有工作流状态
     """
     try:
         system_token = credentials.credentials
@@ -426,7 +439,9 @@ async def get_workflow_status(
         if not data:
             return GetWorkflowStatusResponse(ok=1, failed="未找到该病人的工作流信息", data=None)
         
-        return GetWorkflowStatusResponse(ok=0, failed="", data=WorkflowStatusInfo(**data))
+        # 将数据转换为WorkflowStatusInfo列表
+        workflow_status_list = [WorkflowStatusInfo(**item) for item in data]
+        return GetWorkflowStatusResponse(ok=0, failed="", data=workflow_status_list)
     except Exception as e:
         logger.error(f"获取工作流状态失败: {e}", exc_info=True)
         return GetWorkflowStatusResponse(ok=1, failed=str(e), data=None)

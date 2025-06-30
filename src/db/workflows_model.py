@@ -13,7 +13,7 @@ class WorkflowModel(Base):
     completed_by = Column(String(128), ForeignKey('users.unionid'), comment='完成者')
     completed_at = Column(TIMESTAMP, nullable=True, comment='完成时间')
     notes = Column(Text, comment='附注')
-    # rank = Column(Integer, nullable=False, comment='排序')
+    rank = Column(Integer, nullable=False, comment='排序')
 
     patient = relationship('PatientModel', back_populates='workflows')
     starter = relationship('UserModel', foreign_keys=[started_by], back_populates='workflows_started')

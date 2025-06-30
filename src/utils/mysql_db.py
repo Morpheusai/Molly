@@ -4,6 +4,7 @@ import os
 import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional
+from collections import OrderedDict
 
 from dotenv import load_dotenv
 from fastapi import (
@@ -13,7 +14,7 @@ from fastapi import (
     status
 )
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy import delete, desc, update, asc, func
+from sqlalchemy import delete, desc, update, asc, func, text
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -138,111 +139,111 @@ async def create_medical_records_sql(session, request: CreateMedicalRecordReques
         await session.commit()
         await session.refresh(patient)
 
-        # 新增：创建PredictionModel记录
-        prediction = PredictionModel(
-            patient_id=patient.id,
-            result=None,
-            summary=None
-        )
-        session.add(prediction)
-        await session.commit()
-        await session.refresh(prediction)
+        # # 新增：创建PredictionModel记录
+        # prediction = PredictionModel(
+        #     patient_id=patient.id,
+        #     result=None,
+        #     summary=None
+        # )
+        # session.add(prediction)
+        # await session.commit()
+        # await session.refresh(prediction)
 
         # 新增：为该预测插入4条PredictionDetailModel记录
-        now = datetime.now()
-        details = [
-            PredictionDetailModel(
-                patient_id=patient.id,
-                prediction_id=prediction.id,
-                rank=1,
-                tool_name="Netchop",
-                tool_parameters={
-                    "input_filename": "minio://molly/c7cbf447-835d-4049-bfce-a0166ab8ed0d_test.fasta",
-                    "cleavage_site_threshold": 0.5,
-                    "model": 0,
-                    "format": 0,
-                    "strict": 0
-                },
-                status="pending",
-                start_time=now,
-                end_time=now,
-                elapsed_time=None,
-                error_message=None,
-                tool_output={
-                    "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
-                    "content": "工具结果"
-                }
-            ),
-            PredictionDetailModel(
-                patient_id=patient.id,
-                prediction_id=prediction.id,
-                rank=2,
-                tool_name="Netctlpan",
-                tool_parameters={
-                    "input_filename": "minio://molly/a66b7062-b6cb-4d0a-8258-50b869ac657b_test.fasta",
-                    "mhc_allele": "HLA-A02:01,HLA-A02:02,HLA-A02:03,HLA-A02:04",
-                    "peptide_length": 9,
-                    "weight_of_tap": 0.025,
-                    "weight_of_clevage": 0.225,
-                    "epi_threshold": 1.0,
-                    "output_threshold": -99.9,
-                    "sort_by": -1
-                },
-                status="pending",
-                start_time=now,
-                end_time=now,
-                elapsed_time=None,
-                error_message=None,
-                tool_output={
-                    "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
-                    "content": "工具结果"
-                }
-            ),
-            PredictionDetailModel(
-                patient_id=patient.id,
-                prediction_id=prediction.id,
-                rank=3,
-                tool_name="Netmhcpan",
-                tool_parameters={
-                    "input_filename": "minio://molly/c7cbf447-835d-4049-bfce-a0166ab8ed0d_test.fasta",
-                    "mhc_allele": "HLA-A02:01,HLA-A02:02",
-                    "peptide_length": -1,
-                    "high_threshold_of_bp": 0.5,
-                    "low_threshold_of_bp": 2.0,
-                    "rank_cutoff": -99.9
-                },
-                status="pending",
-                start_time=now,
-                end_time=now,
-                elapsed_time=None,
-                error_message=None,
-                tool_output={
-                    "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
-                    "content": "工具结果"
-                }
-            ),
-            PredictionDetailModel(
-                patient_id=patient.id,
-                prediction_id=prediction.id,
-                rank=4,
-                tool_name="Bigmhcpan",
-                tool_parameters={
-                    "input_filename": "minio://molly/c7cbf447-835d-4049-bfce-a0166ab8ed0d_test.fasta",
-                    "mhc_allele": "HLA-A02:01,HLA-A02:02"
-                },
-                status="pending",
-                start_time=now,
-                end_time=now,
-                elapsed_time=None,
-                error_message=None,
-                tool_output={
-                    "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
-                    "content": "工具结果"
-                }
-            )
-        ]
-        session.add_all(details)
-        await session.commit()
+        # now = datetime.now()
+        # details = [
+        #     PredictionDetailModel(
+        #         patient_id=patient.id,
+        #         prediction_id=prediction.id,
+        #         rank=1,
+        #         tool_name="Netchop",
+        #         tool_parameters={
+        #             "input_filename": "minio://molly/c7cbf447-835d-4049-bfce-a0166ab8ed0d_test.fasta",
+        #             "cleavage_site_threshold": 0.5,
+        #             "model": 0,
+        #             "format": 0,
+        #             "strict": 0
+        #         },
+        #         status="pending",
+        #         start_time=now,
+        #         end_time=now,
+        #         elapsed_time=None,
+        #         error_message=None,
+        #         tool_output={
+        #             "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
+        #             "content": "工具结果"
+        #         }
+        #     ),
+        #     PredictionDetailModel(
+        #         patient_id=patient.id,
+        #         prediction_id=prediction.id,
+        #         rank=2,
+        #         tool_name="Netctlpan",
+        #         tool_parameters={
+        #             "input_filename": "minio://molly/a66b7062-b6cb-4d0a-8258-50b869ac657b_test.fasta",
+        #             "mhc_allele": "HLA-A02:01,HLA-A02:02,HLA-A02:03,HLA-A02:04",
+        #             "peptide_length": 9,
+        #             "weight_of_tap": 0.025,
+        #             "weight_of_clevage": 0.225,
+        #             "epi_threshold": 1.0,
+        #             "output_threshold": -99.9,
+        #             "sort_by": -1
+        #         },
+        #         status="pending",
+        #         start_time=now,
+        #         end_time=now,
+        #         elapsed_time=None,
+        #         error_message=None,
+        #         tool_output={
+        #             "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
+        #             "content": "工具结果"
+        #         }
+        #     ),
+        #     PredictionDetailModel(
+        #         patient_id=patient.id,
+        #         prediction_id=prediction.id,
+        #         rank=3,
+        #         tool_name="Netmhcpan",
+        #         tool_parameters={
+        #             "input_filename": "minio://molly/c7cbf447-835d-4049-bfce-a0166ab8ed0d_test.fasta",
+        #             "mhc_allele": "HLA-A02:01,HLA-A02:02",
+        #             "peptide_length": -1,
+        #             "high_threshold_of_bp": 0.5,
+        #             "low_threshold_of_bp": 2.0,
+        #             "rank_cutoff": -99.9
+        #         },
+        #         status="pending",
+        #         start_time=now,
+        #         end_time=now,
+        #         elapsed_time=None,
+        #         error_message=None,
+        #         tool_output={
+        #             "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
+        #             "content": "工具结果"
+        #         }
+        #     ),
+        #     PredictionDetailModel(
+        #         patient_id=patient.id,
+        #         prediction_id=prediction.id,
+        #         rank=4,
+        #         tool_name="Bigmhcpan",
+        #         tool_parameters={
+        #             "input_filename": "minio://molly/c7cbf447-835d-4049-bfce-a0166ab8ed0d_test.fasta",
+        #             "mhc_allele": "HLA-A02:01,HLA-A02:02"
+        #         },
+        #         status="pending",
+        #         start_time=now,
+        #         end_time=now,
+        #         elapsed_time=None,
+        #         error_message=None,
+        #         tool_output={
+        #             "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
+        #             "content": "工具结果"
+        #         }
+        #     )
+        # ]
+        # session.add_all(details)
+        # await session.commit()
 
         # 如果传了source_id，更新对应文件的patient_id
         if getattr(request, 'source_id', None):
@@ -687,24 +688,27 @@ async def get_messages_by_conversation_id_sql(session, conversation_id: int):
 @with_async_session
 async def get_workflow_status_by_patient_id_sql(session, patient_id: int):
     """
-    根据病人ID查询最新的工作流状态
+    根据病人ID查询所有工作流状态
     """
     try:
-        workflow = await session.execute(
-            select(WorkflowModel.stage, WorkflowModel.status)
+        logger.info(f"查询病人 {patient_id} 的工作流状态")
+        workflows = await session.execute(
+            select(WorkflowModel.stage, WorkflowModel.status, WorkflowModel.rank)
             .where(WorkflowModel.patient_id == patient_id)
-            .order_by(WorkflowModel.id.desc())
+            .order_by(WorkflowModel.rank)
         )
-        result = workflow.first()
-        if result:
-            return {
-                "stage": result.stage,
-                "status": result.status
-            }
-        return None
+        result = []
+        for row in workflows.all():
+            result.append({
+                "stage": row.stage,
+                "status": row.status,
+                "rank": row.rank
+            })
+        logger.info(f"查询结果: {result}")
+        return result
     except Exception as e:
         logger.error(f"查询工作流状态失败: {e}", exc_info=True)
-        return None
+        return []
 
 @with_async_session
 async def get_conversation_id_by_patient_and_type_sql(session, patient_id: int, conversation_type: str):
@@ -751,21 +755,24 @@ async def get_prediction_details_by_patient_id_sql(session, patient_id: int):
             .where(PredictionDetailModel.patient_id == patient_id)
             .order_by(asc(PredictionDetailModel.rank))
         )
-        result = [
-            {
+        result = []
+        for row in details.all():
+            # 将JSON字符串反序列化为字典
+            tool_parameters = json.loads(row.tool_parameters) if row.tool_parameters else None
+            tool_output = json.loads(row.tool_output) if row.tool_output else None
+            
+            result.append({
                 "rank": row.rank,
                 "tool_name": row.tool_name,
-                "tool_parameters": row.tool_parameters,
+                "tool_parameters": tool_parameters,
                 "status": row.status,
                 "start_time": row.start_time.strftime('%Y-%m-%d %H:%M:%S') if row.start_time else None,
                 "end_time": row.end_time.strftime('%Y-%m-%d %H:%M:%S') if row.end_time else None,
                 "elapsed_time": row.elapsed_time,
                 "error_message": row.error_message,
-                "tool_output": row.tool_output,
+                "tool_output": tool_output,
                 "prediction_create_time": row.prediction_create_time.strftime('%Y-%m-%d %H:%M:%S') if row.prediction_create_time else None
-            }
-            for row in details.all()
-        ]
+            })
         return result
     except Exception as e:
         logger.error(f"查询PredictionDetailModel失败: {e}", exc_info=True)
@@ -801,21 +808,24 @@ async def get_prediction_groups_by_patient_id_sql(session, patient_id: int):
                 ).where(PredictionDetailModel.prediction_id == pred.id)
                 .order_by(asc(PredictionDetailModel.rank))
             )
-            details = [
-                {
+            details = []
+            for row in details_query.all():
+                # 将JSON字符串反序列化为字典
+                tool_parameters = json.loads(row.tool_parameters) if row.tool_parameters else None
+                tool_output = json.loads(row.tool_output) if row.tool_output else None
+                
+                details.append({
                     "rank": row.rank,
                     "tool_name": row.tool_name,
-                    "tool_parameters": row.tool_parameters,
+                    "tool_parameters": tool_parameters,
                     "status": row.status,
                     "start_time": row.start_time.strftime('%Y-%m-%d %H:%M:%S') if row.start_time else None,
                     "end_time": row.end_time.strftime('%Y-%m-%d %H:%M:%S') if row.end_time else None,
                     "elapsed_time": row.elapsed_time,
                     "error_message": row.error_message,
-                    "tool_output": row.tool_output,
+                    "tool_output": tool_output,
                     "prediction_create_time": pred.create_time.strftime('%Y-%m-%d %H:%M:%S') if pred.create_time else None
-                }
-                for row in details_query.all()
-            ]
+                })
             result.append({
                 "prediction_id": pred.id,
                 "create_time": pred.create_time.strftime('%Y-%m-%d %H:%M:%S') if pred.create_time else None,
@@ -851,6 +861,9 @@ async def handle_tool_input_output_sql(session, request):
         if prediction.patient_id != request.patient_id:
             return ToolInputOutputResponse(ok=1, failed="预测记录不属于该病人", predict_detail_id=None)
         
+        # 将字典序列化为JSON字符串，保持键的顺序
+        parameters_json = json.dumps(request.parameters, ensure_ascii=False, separators=(',', ':'))
+        
         # 根据mode判断是输入还是输出
         if request.mode == 0:  # 工具输入参数
             # 获取当前最大rank
@@ -860,14 +873,14 @@ async def handle_tool_input_output_sql(session, request):
             )
             max_rank = max_rank_result.scalar() or 0
             new_rank = max_rank + 1
-            
+
             # 创建新记录
             new_detail = PredictionDetailModel(
                 patient_id=request.patient_id,
                 prediction_id=request.prediction_id,
                 rank=new_rank,
                 tool_name=request.tool_name,
-                tool_parameters=request.parameters,
+                tool_parameters=parameters_json,  # 存储JSON字符串
                 tool_output=None,
                 status='pending',
                 start_time=datetime.now(),
@@ -896,14 +909,14 @@ async def handle_tool_input_output_sql(session, request):
                 return ToolInputOutputResponse(ok=1, failed="未找到对应的工具记录", predict_detail_id=None)
             
             # 更新输出结果
-            detail.tool_output = request.parameters
+            detail.tool_output = parameters_json  # 存储JSON字符串
             detail.status = 'completed'
             detail.end_time = datetime.now()
             if detail.start_time:
                 detail.elapsed_time = int((detail.end_time - detail.start_time).total_seconds())
             await session.commit()
             predict_detail_id = detail.id
-            
+
         else:
             return ToolInputOutputResponse(ok=1, failed="无效的mode值", predict_detail_id=None)
         
