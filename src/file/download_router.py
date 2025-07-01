@@ -1,5 +1,6 @@
 import os
 import re
+from urllib.parse import quote
 
 from fastapi import Body, HTTPException, APIRouter,Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -84,6 +85,7 @@ async def download_file(
         file_size = file_stat.size
         file_type = file_stat.content_type or "application/octet-stream"
         file_name = object_name.split("/")[-1]
+        encoded_file_name = quote(file_name)
 
         async def stream_file():
             try:
@@ -100,7 +102,7 @@ async def download_file(
             stream_file(),
             media_type=file_type,
             headers={
-                "Content-Disposition": f"attachment; filename*=UTF-8''{file_name}",
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_file_name}",
                 "Content-Length": str(file_size),
                 "Cache-Control": "no-store",
                 "Pragma": "no-cache",

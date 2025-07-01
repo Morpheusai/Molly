@@ -329,7 +329,7 @@ async def backend_chat_with_files(
             cdr3 = [cdr.strip() for cdr in patient.CDR_type.split(',') if cdr.strip()]
 
         # 5. 先插入一条用户消息
-        await insert_message_sql(conversation_id=conversation_id, type='user',content="开始预测")
+        await insert_message_sql(conversation_id=conversation_id, type='user',content="使用默认参数，开始预测")
         
         # 6. 更新工作流状态为pending
         # 查找对应stage的工作流记录（新抗原预测阶段，rank=3）
@@ -482,7 +482,7 @@ async def predict_antigen_with_custom_params(
             cdr3 = [cdr.strip() for cdr in patient.CDR_type.split(',') if cdr.strip()]
 
         # 5. 先插入一条用户消息
-        await insert_message_sql(conversation_id=conversation_id, type='user',content="开始预测")
+        await insert_message_sql(conversation_id=conversation_id, type='user',content="完成自定义参数收集，开始预测")
         
         # 6. 更新工作流状态为pending
         # 查找对应stage的工作流记录（新抗原预测阶段，rank=3）

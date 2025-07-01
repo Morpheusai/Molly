@@ -156,7 +156,7 @@ class UserInput(BaseModel):
 
 class CustomPredictUserInputRequest(BaseModel):
     """用户自定义参数的请求类，包含必填字段验证"""
-    patient_id: str = Field(description="病人id")
+    patient_id: int = Field(description="病人id")
     parameters: dict[str, Any] = Field(
         description="预测参数，必须包含netchop且其中必须包含input_filename",
         examples=[{
@@ -186,7 +186,7 @@ class CustomPredictUserInputRequest(BaseModel):
 
 class PredictUserInputRequest(BaseModel):
     """Basic user input for the agent."""
-    patient_id: str = Field(description="病人id")
+    patient_id: int = Field(description="病人id")
     conversation_id: int = Field(description="会话id")
     file_path: str = Field(
         description="测序文件minio路径",
@@ -230,7 +230,7 @@ class PredictUserInputAgentRequest(BaseModel):
         examples=["_______________________________DQATSLRILNNGHAFNVEFDDSQDKAVLK"or"What is the weather in Tokyo?"],
     )
 
-    patient_id: str = Field(description="病人id")
+    patient_id: int = Field(description="病人id")
 
     predict_id: int = Field(description="预测表id")
 
@@ -412,6 +412,7 @@ class PatientDetailResponse(BaseResponse):
 # 获取病人详细信息的请求模型
 class PatientDetailRequest(BaseModel):
     patient_id: int  # 需要查询的病人主键ID
+    file_type: Optional[str] = Field(None, description="要筛选的文件类型，不传则返回所有类型")
 
 # 创建项目请求模型
 class CreateProjectRequest(BaseModel):
@@ -436,7 +437,6 @@ class PatientInfoRequest(BaseModel):
 class PatientInfoResponse(BaseResponse):
     """病人信息提取响应模型"""
     structured_info: dict = Field(description="结构化后的病人信息")
-    source_id: Optional[int] = Field(None, description="上传文件的ID")
 
 class FileInfo(BaseModel):
     """

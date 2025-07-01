@@ -53,14 +53,14 @@ if not minio_client.bucket_exists(bucket_molly):
 @router.post("/upload_sequence_files")
 async def upload_attachments(
     files: List[UploadFile] = File(...),
-    patient_id: str = Body(...),
+    patient_id: int = Body(...),
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> Dict:
     """并发上传多个文件到 MinIO，使用独立的会话。
 
     参数:
         files (List[UploadFile]): 要上传的文件列表。
-        patient_id (str): 患者ID。
+        patient_id (int): 患者ID。
         unionid (str): 用户ID。
         credentials (HTTPAuthorizationCredentials): JWT认证信息。
 
@@ -121,7 +121,7 @@ async def upload_attachments(
             # 查找对应stage的工作流记录（测序数据阶段，rank=2）
             result = await session.execute(
                 select(WorkflowModel)
-                .where(WorkflowModel.patient_id == int(patient_id))
+                .where(WorkflowModel.patient_id == patient_id)
                 .where(WorkflowModel.stage == '测序数据')
                 .where(WorkflowModel.rank == 2)
             )
@@ -154,12 +154,12 @@ async def calculate_file_hash(file_data: bytes) -> str:
     return hash_value
 
 
-async def insert_file_info_to_db(session: AsyncSession, patient_id: str, unionid: str, file_info: dict) -> FileModel:
+async def insert_file_info_to_db(session: AsyncSession, patient_id: int, unionid: str, file_info: dict) -> FileModel:
     """将文件元数据插入数据库。
 
     参数:
         session (AsyncSession): 活动的数据库会话。
-        patient_id (str): 患者ID。
+        patient_id (int): 患者ID。
         unionid (str): 上传者用户ID。
         file_info (dict): 要插入的文件元数据。
 
@@ -197,12 +197,12 @@ async def insert_file_info_to_db(session: AsyncSession, patient_id: str, unionid
         raise e
 
 
-async def check_existing_file(session: AsyncSession, patient_id: str, file_hash: str) -> Optional[FileModel]:
+async def check_existing_file(session: AsyncSession, patient_id: int, file_hash: str) -> Optional[FileModel]:
     """检查给定患者中是否存在具有相同哈希值的文件。
 
     参数:
         session (AsyncSession): 活动的数据库会话。
-        patient_id (str): 患者ID。
+        patient_id (int): 患者ID。
         file_hash (str): 要搜索的文件内容哈希值。
 
     返回:
@@ -220,7 +220,7 @@ async def check_existing_file(session: AsyncSession, patient_id: str, file_hash:
     return existing_file
 
 
-async def check_file_count(session: AsyncSession, patient_id: str) -> int:
+async def check_file_count(session: AsyncSession, patient_id: int) -> int:
     """查询当前患者的已上传文件数量"""
     query = select(func.count()).select_from(FileModel).where(
         FileModel.patient_id == patient_id,
@@ -333,12 +333,12 @@ async def validate_fasta_file(file_data: bytes) -> tuple[bool, str]:
     return True, ""
 
 
-async def upload_attachment(file: UploadFile, patient_id: str, unionid: str, session: AsyncSession) -> Dict:
+async def upload_attachment(file: UploadFile, patient_id: int, unionid: str, session: AsyncSession) -> Dict:
     """异步上传单个文件到 MinIO 并存储其元数据。
 
     参数:
         file (UploadFile): 要上传的文件。
-        patient_id (str): 患者ID。
+        patient_id (int): 患者ID。
         unionid (str): 上传者用户ID。
         session (AsyncSession): 活动的数据库会话。
 

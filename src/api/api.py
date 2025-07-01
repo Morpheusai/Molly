@@ -350,7 +350,10 @@ async def get_patient_files(
         unionid: str = payload.get("sub")
         if not unionid:
             return PatientFilesResponse(ok=1, failed="无效的用户认证")
-        data = await get_patient_files_sql(request.patient_id)
+        
+        # 调用数据库函数，传入file_type
+        data = await get_patient_files_sql(request.patient_id, request.file_type)
+        
         files = [FileInfo(**f) for f in data["files"]]
         return PatientFilesResponse(ok=0, failed="", files=files, total=data["total"])
     except Exception as e:

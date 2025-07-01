@@ -177,9 +177,10 @@ async def extract_patient_info_from_file(
                     detail=f"提取服务返回错误: {response.text}"
                 )
             result = response.json()
+            structured_info = result.get("structured_info", {})
+            structured_info['source_id'] = uploaded_file.id
             return PatientInfoResponse(
-                structured_info=result["structured_info"],
-                source_id=uploaded_file.id
+                structured_info=structured_info
             )
     except Exception as e:
         logger.error(f"提取病人信息时发生错误: {str(e)}", exc_info=True)

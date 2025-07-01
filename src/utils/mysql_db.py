@@ -443,15 +443,20 @@ async def get_patients_brief_by_project_sql(session, project_id: int):
         return []
 
 @with_async_session
-async def get_patient_files_sql(session, patient_id: int):
+async def get_patient_files_sql(session, patient_id: int, file_type: Optional[str] = None):
     """
     查询指定病人id下所有文件的名、路径、类型及数量
+    如果提供了file_type，则只查询该类型的文件
     """
     try:
-        files = await session.execute(
-            select(FileModel.file_name, FileModel.file_path, FileModel.file_type, FileModel.file_desc)
+        query = select(FileModel.file_name, FileModel.file_path, FileModel.file_type, FileModel.file_desc) \
             .where(FileModel.patient_id == patient_id, FileModel.is_deleted == 0)
-        )
+
+        if file_type:
+            query = query.where(FileModel.file_type == file_type)
+
+        files = await session.execute(query)
+        
         file_list = [
             {"file_name": row.file_name, "file_path": row.file_path, "file_type": row.file_type, "file_desc": row.file_desc}
             for row in files.all()
