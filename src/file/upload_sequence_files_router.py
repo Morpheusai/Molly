@@ -254,67 +254,39 @@ async def upload_to_minio(bucket: str, object_name: str, file_path: Path) -> Non
         logger.error(f"MinIO 上传过程中发生意外错误: {str(e)}")
         raise
 
-
 def is_valid_fasta_content(content: str) -> tuple[bool, str]:
     """验证文件内容是否符合FASTA格式。
-
     参数:
         content (str): 文件内容
-
     返回:
         tuple[bool, str]: (是否有效, 错误信息)
     """
-    # 统一换行符为\n
-    content = content.replace('\r\n', '\n').replace('\r', '\n')
+
+    # 统一换行符为\n，同时按照行来切分
+    items = content.replace('\r\n', '\n').replace('\r', '\n').split('\n')
     
-    # 检查文件是否为空
-    if not content.strip():
-        return False, "文件内容为空"
+    standard_amino_acids = set('ACDEFGHIKLMNPQRSTVWY')
+    # 特殊氨基酸代码
+    special_amino_acids = set('BJOUXZ')
+    # 所有有效的氨基酸代码
+    valid_amino_acids = standard_amino_acids.union(special_amino_acids)
 
-    # 检查是否以'>'开头
-    if not content.strip().startswith('>'):
-        return False, "FASTA文件必须以'>'开头"
-
-    # 分割成序列条目
-    entries = content.split('>')
-    entries = [entry.strip() for entry in entries if entry.strip()]
-
-    # 验证每个序列条目
-    for i, entry in enumerate(entries, 1):
-        # 检查是否包含序列数据
-        if not entry:
-            return False, f"第{i}个序列条目为空"
-
-        # 分割标题行和序列行
-        lines = entry.split('\n')
-        if not lines:  # 确保至少有一行
-            return False, f"第{i}个序列条目格式错误：缺少序列数据"
-
-        # 获取序列部分（跳过标题行）
-        sequence = ''.join(lines[1:])
-        if not sequence:  # 确保有序列数据
-            return False, f"第{i}个序列条目没有序列数据"
-
-        # 检查序列是否只包含有效的氨基酸代码
-        # 标准氨基酸代码
-        standard_amino_acids = set('ACDEFGHIKLMNPQRSTVWY')
-        # 特殊氨基酸代码
-        special_amino_acids = set('BJOUXZ')
-        # 所有有效的氨基酸代码
-        valid_amino_acids = standard_amino_acids.union(special_amino_acids)
-        
-        # 移除所有空白字符后再检查
-        sequence = ''.join(sequence.split())
-        invalid_chars = set(char.upper() for char in sequence if char.upper() not in valid_amino_acids)
-        if invalid_chars:
-            return False, f"第{i}个序列包含无效的氨基酸代码：{', '.join(sorted(invalid_chars))}。有效的氨基酸代码包括：标准氨基酸(A-Z)和特殊氨基酸(B,J,O,U,X,Z)"
+    for icount, item in enumerate(items):
+        # 去除行首和行尾的空白字符
+        sequence = item.strip()
+        if item.startswith('>'):
+            # 检查头部格式
+            if len(item) == 1:
+                return False, f"第{icount}行，缺少必要的序列注释: {item}"
+        else:
+            invalid_chars = set(char.upper() for char in sequence if char.upper() not in valid_amino_acids)
+            if invalid_chars:
+                return False, f"序列{item}包含无效的氨基酸代码：{', '.join(sorted(invalid_chars))}。有效的氨基酸代码包括：标准氨基酸(A-Z)和特殊氨基酸(B,J,O,U,X,Z)"
 
     return True, ""
 
-
 async def validate_fasta_file(file_data: bytes) -> tuple[bool, str]:
     """验证上传的文件是否为有效的FASTA文件。
-
     参数:
         file_data (bytes): 文件内容
 
@@ -331,7 +303,6 @@ async def validate_fasta_file(file_data: bytes) -> tuple[bool, str]:
         return False, f"文件格式不符合FASTA标准：{error_message}"
 
     return True, ""
-
 
 async def upload_attachment(file: UploadFile, patient_id: int, unionid: str, session: AsyncSession) -> Dict:
     """异步上传单个文件到 MinIO 并存储其元数据。
@@ -374,12 +345,12 @@ async def upload_attachment(file: UploadFile, patient_id: int, unionid: str, ses
             }
 
         # 验证FASTA文件格式
-        # is_valid, error_message = await validate_fasta_file(file_data)
-        # if not is_valid:
-        #     return {
-        #         "ok": 1,
-        #         "failed": error_message
-        #     }
+        is_valid, error_message = await validate_fasta_file(file_data)
+        if not is_valid:
+            return {
+                "ok": 1,
+                "failed": error_message
+            }
 
         # 计算文件哈希值
         file_hash = await calculate_file_hash(file_data)

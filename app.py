@@ -1,4 +1,3 @@
-import asyncio
 import httpx
 import json
 import os
@@ -9,7 +8,6 @@ from celery import Celery
 from fastapi import Depends, FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-# from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -31,8 +29,15 @@ from src.api.api import (
     get_project_detail,
     get_project_stage_stats
 )
-from src.api.protocols import UserInput, AddUserRequest, PredictUserInputRequest, PredictUserInputAgentRequest,CustomPredictUserInputRequest, ProjectFullListResponse, PatientFullListResponse
-# from src.db.uploadfiles_model import UploadedFile
+from src.api.protocols import (
+    UserInput, 
+    AddUserRequest, 
+    PredictUserInputRequest, 
+    PredictUserInputAgentRequest,
+    CustomPredictUserInputRequest, 
+    ProjectFullListResponse, 
+    PatientFullListResponse
+)
 from src.db.conversation_model import ConversationModel
 from src.db.patient_model import PatientModel
 from src.db.workflows_model import WorkflowModel
@@ -42,7 +47,6 @@ from src.file.download_router import router as download_router
 from src.file.display_router import router as display_router
 from src.file.upload_sequence_files_router import router as upload_router
 from src.file.extract_patient_info_router import router as extract_router
-# from src.file.migrate import router as files_migrate
 from src.file.markdown_download_router import router as markdown_download_file
 from src.utils import logger
 from src.utils.jwt_util import create_system_token, decode_vaild
@@ -53,10 +57,7 @@ agent_broker_url = g_config["url"]["agent_broker_url"]
 
 celery_agent = Celery( "celery_task_agent", broker=agent_broker_url)
 
-
-
-logger.info(
-    f"========================start neo backend==============================")
+logger.info(f"========================start neo backend==============================")
 
 app = FastAPI()
 
@@ -103,10 +104,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
 @app.get("/")
 def read_root():
     return {"Hello": "我是Molly后端服务"}
-
-
 @app.get("/backend/wechat_callback")
-async def wechat_callback(app_id: str, code: str,state: Optional[str] = None) -> Dict[str, Any]:
+cesync def wechat_callback(app_id: str, code: str,state: Optional[str] = None) -> Dict[str, Any]:
     """
     处理微信授权回调
     Args:
@@ -537,9 +536,15 @@ async def predict_antigen_with_custom_params(
             except Exception as e:
                 logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
         
-        celery_agent.send_task("src.utils.celery_task_agent.run_and_consume_generator", args=[agent_request.dict(), conversation_id, patient_id, unionid])
-  
-        
+        celery_agent.send_task(
+            "src.utils.celery_task_agent.run_and_consume_generator", 
+            args=[
+                agent_request.dict(), 
+                conversation_id, 
+                patient_id, 
+                unionid
+            ]
+        )
         return {"ok": 0, "failed": ""}
     except HTTPException as e:
         raise e
@@ -547,10 +552,8 @@ async def predict_antigen_with_custom_params(
         logger.exception("处理请求时发生未捕获的异常:")
         return await generate_error_response(str(e))
 
-
-
-
 app.include_router(upload_router, prefix="/backend")
+
 app.include_router(extract_router, prefix="/backend")
 
 app.post("/backend/create_medical_records",
