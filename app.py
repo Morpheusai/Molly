@@ -105,7 +105,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
 def read_root():
     return {"Hello": "我是Molly后端服务"}
 @app.get("/backend/wechat_callback")
-cesync def wechat_callback(app_id: str, code: str,state: Optional[str] = None) -> Dict[str, Any]:
+async def wechat_callback(app_id: str, code: str,state: Optional[str] = None) -> Dict[str, Any]:
     """
     处理微信授权回调
     Args:
