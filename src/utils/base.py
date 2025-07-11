@@ -17,18 +17,35 @@ encoded_password = quote_plus(password)
 
 SQLALCHEMY_DATABASE_URI = f"mysql+asyncmy://{user}:{encoded_password}@{host}:{port}/{database}?charset=utf8mb4"
 
-async_engine = create_async_engine(
-    SQLALCHEMY_DATABASE_URI,
-    echo=True,
-    pool_size=10,  # 连接池中保持的连接数
-    max_overflow=20,  # 连接池外最多可以创建的连接数
-    pool_timeout=30,  # 从连接池获取连接的超时时间（秒）
-    pool_recycle=3600,  # 连接回收时间（秒），避免数据库断开连接
-    pool_pre_ping=True,  # 每次从连接池获取连接时检查连接是否有效
-)
-
-
-AsyncSessionLocal = sessionmaker(
-    bind=async_engine, class_=AsyncSession, expire_on_commit=False)
+if os.getenv("IS_CELERY_WORKER") == "1":
+    # Celery worker 不创建全局 engine
+    AsyncSessionLocal = None
+else:
+    async_engine = create_async_engine(
+        SQLALCHEMY_DATABASE_URI,
+        echo=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_timeout=30,
+        pool_recycle=3600,
+        pool_pre_ping=True,
+    )
+    AsyncSessionLocal = sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
 
 Base: DeclarativeMeta = declarative_base()
+
+def get_async_session_local():
+    if os.getenv("IS_CELERY_WORKER") == "1":
+        engine = create_async_engine(
+            SQLALCHEMY_DATABASE_URI,
+            echo=True,
+            pool_size=10,
+            max_overflow=20,
+            pool_timeout=30,
+            pool_recycle=3600,
+            pool_pre_ping=True,
+        )
+        return sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    else:
+        return AsyncSessionLocal
+

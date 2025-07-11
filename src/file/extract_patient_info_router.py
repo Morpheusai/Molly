@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from minio.error import S3Error
 from src.db.file_model import FileModel
-from src.utils.base import AsyncSessionLocal
+from src.utils.base import get_async_session_local
 from src.utils.jwt_util import decode_vaild
 from src.utils.minio import minio_client, bucket_molly
 import base64
@@ -88,6 +88,8 @@ async def extract_patient_info_from_file(
         unionid: str = payload.get("sub")
         if unionid is None:
             raise HTTPException(status_code=401, detail="unionid不存在")
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"Token验证失败: {str(e)}")
         raise HTTPException(status_code=401, detail=f"无效的token: {str(e)}")
@@ -126,6 +128,7 @@ async def extract_patient_info_from_file(
         logger.info(f'DescAgent return file_desc:{file_desc}')
 
         # 写入数据库
+        AsyncSessionLocal = get_async_session_local()
         async with AsyncSessionLocal() as session:
             file_info = {
                 "file_name": file.filename,
@@ -180,6 +183,7 @@ async def extract_patient_info_from_file(
             structured_info = result.get("structured_info", {})
             structured_info['source_id'] = uploaded_file.id
             return PatientInfoResponse(
+                content=file_content,
                 structured_info=structured_info
             )
     except Exception as e:

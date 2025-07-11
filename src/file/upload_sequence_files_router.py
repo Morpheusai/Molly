@@ -22,7 +22,7 @@ from src.api.protocols import DescRequest, DescResponse
 from src.config import g_config
 from src.db.file_model import FileModel
 from src.db.workflows_model import WorkflowModel
-from src.utils.base import AsyncSessionLocal
+from src.utils.base import get_async_session_local
 from src.utils.log import logger
 from src.utils.jwt_util import decode_vaild
 from src.utils.minio import minio_client, bucket_molly
@@ -89,7 +89,7 @@ async def upload_attachments(
         }      
 
     async def process_file(file: UploadFile):
-        async with sem, AsyncSessionLocal() as session:
+        async with sem, get_async_session_local()() as session:
             return await upload_attachment(file, patient_id, unionid, session)
 
     tasks = [process_file(file) for file in files]
@@ -117,7 +117,7 @@ async def upload_attachments(
     
     # 如果上传成功，更新工作流状态
     if not has_errors:
-        async with AsyncSessionLocal() as session:
+        async with get_async_session_local()() as session:
             # 查找对应stage的工作流记录（测序数据阶段，rank=2）
             result = await session.execute(
                 select(WorkflowModel)
@@ -374,12 +374,12 @@ async def upload_attachment(file: UploadFile, patient_id: int, unionid: str, ses
             }
 
         # 验证FASTA文件格式
-        is_valid, error_message = await validate_fasta_file(file_data)
-        if not is_valid:
-            return {
-                "ok": 1,
-                "failed": error_message
-            }
+        # is_valid, error_message = await validate_fasta_file(file_data)
+        # if not is_valid:
+        #     return {
+        #         "ok": 1,
+        #         "failed": error_message
+        #     }
 
         # 计算文件哈希值
         file_hash = await calculate_file_hash(file_data)
@@ -428,7 +428,9 @@ async def upload_attachment(file: UploadFile, patient_id: int, unionid: str, ses
         # 请求DescAgent获取file_desc
         file_desc = await request_descagent(file.filename, file_data, file.content_type)
         logger.info(f'DescAgent return file_desc:{file_desc}')
-        file_info["file_desc"] = file_desc
+        #TODO
+        # file_info["file_desc"] = file_desc
+        file_info["file_desc"] = "123"
 
         # 上传成功，插入数据库
         inserted_file = await insert_file_info_to_db(session, patient_id, unionid, file_info)

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any,Literal
+from typing import Optional, List, Dict, Any,Literal, Union
 from pydantic import validator
 
 
@@ -234,7 +234,7 @@ class PredictUserInputAgentRequest(BaseModel):
 
     predict_id: int = Field(description="预测表id")
 
-    conversation_id: str = Field(
+    conversation_id: int = Field(
         description="会话id",
     )
 
@@ -259,13 +259,14 @@ class PredictUserInputAgentRequest(BaseModel):
     examples=[
         {
             "netchop": {
+                "peptide_length": [9],
                 "cleavage_site_threshold": 0.5,
                 "model": 0,
                 "format": 0,
                 "strict": 0
             },
             "netctlpan": {
-                "peptide_length": -1 ,
+                "peptide_length": [9],
                 "weight_of_tap": 0.025,
                 "weight_of_clevage": 0.225,
                 "epi_threshold": 1.0,
@@ -273,7 +274,7 @@ class PredictUserInputAgentRequest(BaseModel):
                 "sort_by": -1
             },
             "netmhcpan": { 
-                "peptide_length": -1 ,
+                "peptide_length": [9],
                 "high_threshold_of_bp": 0.5,
                 "low_threshold_of_bp": 2.0,
                 "rank_cutoff": -99.9,
@@ -318,6 +319,7 @@ class DisplayResponse(BaseResponse):
 
 # 创建病历请求模型
 class CreateMedicalRecordRequest(BaseModel):
+    patient_id: Optional[Union[int, str]] = ""  # 新增或修改病人时用
     project_id: int = Field(..., description="所属项目ID")
     medical_record_number: Optional[str] = Field(default="", description="病历号")
     name: Optional[str] = Field(default="", description="患者姓名")
@@ -333,6 +335,8 @@ class CreateMedicalRecordRequest(BaseModel):
     treatment_state: Optional[str] = Field(default="", description="治疗阶段")
     additional_info: Optional[str] = Field(default="", description="附加信息")
     source_id: Optional[int] = Field(default=None, description="病历来源文件ID，可不传")
+    clinical_medication: Optional[str] = Field(default="", description="临床用药")
+    clinical_diagnosis: Optional[str] = Field(default="", description="临床诊断")
 
 # 创建病历响应模型
 class CreateMedicalRecordResponse(BaseResponse):
@@ -416,7 +420,23 @@ class PatientDetailRequest(BaseModel):
 
 # 创建项目请求模型
 class CreateProjectRequest(BaseModel):
+    project_id: Optional[int] = Field(default=None, description="项目ID，如果不传则创建新项目，如果传入则更新现有项目")
     name: str = Field(..., description="项目名称")
+    project_code: Optional[str] = Field(default=None, description="项目编号")
+    short_name: Optional[str] = Field(default=None, description="项目简称")
+    description: Optional[str] = Field(default=None, description="项目简介")
+    project_type: Optional[Literal['IIT', '注册试验', '探索性研究']] = Field(default=None, description="项目类型")
+    indication: Optional[str] = Field(default=None, description="适应症")
+    study_phase: Optional[Literal['I期', 'II期', 'III期', '未指定', 'IIT']] = Field(default=None, description="研究分期")
+    is_multicenter: Optional[Literal['是', '否']] = Field(default=None, description="是否多中心")
+    registration_number: Optional[str] = Field(default=None, description="注册号")
+    registration_platform_url: Optional[str] = Field(default=None, description="注册平台链接")
+    principal_investigator: Optional[str] = Field(default=None, description="项目负责人")
+    pi_email: Optional[str] = Field(default=None, description="项目负责人邮箱")
+    hospital: Optional[str] = Field(default=None, description="所属医院")
+    phone: Optional[str] = Field(default=None, description="手机号")
+    patient_enrollment_count: int = Field(..., description="患者入组人数")
+    status: Optional[int] = Field(default=0, description="项目状态：0-保存草稿，1-创建立项")
 
 # 创建项目响应模型
 class CreateProjectResponse(BaseResponse):
@@ -426,6 +446,7 @@ class CreateProjectResponse(BaseResponse):
 class ProjectInfo(BaseModel):
     project_id: int
     name: str
+    status: int = Field(description="项目状态：0-保存草稿，1-创建立项")
 
 class ProjectListResponse(BaseResponse):
     projects: list[ProjectInfo] = []
@@ -436,6 +457,7 @@ class PatientInfoRequest(BaseModel):
 
 class PatientInfoResponse(BaseResponse):
     """病人信息提取响应模型"""
+    content: Optional[str] = Field(None, description="文件完整内容")
     structured_info: dict = Field(description="结构化后的病人信息")
 
 class FileInfo(BaseModel):
@@ -506,6 +528,7 @@ class PredictionDetailItem(BaseModel):
     elapsed_time: int | None = None
     error_message: str | None = None
     tool_output: dict | None = None
+    flag: int = 0
 
 class PredictionGroup(BaseModel):
     prediction_id: int
@@ -514,6 +537,7 @@ class PredictionGroup(BaseModel):
 
 class PredictionDetailListResponse(BaseResponse):
     details: list[PredictionGroup] = []
+    flag: int = 0
 
 
 """验证工具的输入、输出类，存入预测细节表中"""
@@ -658,9 +682,146 @@ class ToolInputOutputRequest(BaseModel):
     mode: int = Field(..., description="模式：0-工具输入参数，1-工具输出结果")
     tool_name: str = Field(..., description="工具名称：BigMHC_IM、NetChop、NetCTLpan、NetMHCPan")
     parameters: dict = Field(..., description="工具参数或输出结果")
+    flag: int = Field(default=0, description="流程结束标志：0-未结束，1-已结束")
 
 # 新增：工具输入输出响应模型
 class ToolInputOutputResponse(BaseResponse):
     """工具输入输出响应模型"""
     predict_detail_id: Optional[int] = Field(None, description="预测详情ID")
+
+class HandleAIMessageRequest(BaseModel):
+    """
+    处理AI消息的请求模型。
+    用于指定会话ID和要追加或新建的AI消息内容。
+    字段：
+        conversation_id: int，会话ID。
+        ai_message: str，要追加或新建的AI消息内容。
+    """
+    conversation_id: int = Field(..., description="会话ID")
+    ai_message: str = Field(..., description="AI消息内容")
+
+class HandleAIMessageResponse(BaseResponse):
+    """
+    处理AI消息的响应模型。
+    返回操作后的消息ID和最新的消息内容。
+    字段：
+        message_id: int | None，操作后的消息ID。
+        content: str | None，最新的消息内容。
+    """
+    message_id: int | None = Field(None, description="操作后的消息ID")
+    content: str | None = Field(None, description="最新的消息内容")
+
+class GetProjectDetailRequest(BaseModel):
+    """
+    获取项目详情的请求模型
+    参数：
+        project_id: 项目ID
+    """
+    project_id: int = Field(..., description="项目ID")
+
+class ProjectDetailInfo(BaseModel):
+    """
+    项目详情信息模型（包含所有字段）
+    """
+    name: str = Field(description="项目名称")
+    created_at: str = Field(description="创建时间")
+    updated_at: str = Field(description="更新时间")
+    project_code: str | None = Field(None, description="项目编号")
+    short_name: str | None = Field(None, description="项目简称")
+    description: str | None = Field(None, description="项目简介")
+    project_type: str = Field(description="项目类型")
+    indication: str | None = Field(None, description="适应症")
+    study_phase: str = Field(description="研究分期")
+    is_multicenter: str = Field(description="是否多中心")
+    registration_number: str | None = Field(None, description="注册号")
+    registration_platform_url: str | None = Field(None, description="注册平台链接")
+    principal_investigator: str | None = Field(None, description="项目负责人")
+    pi_email: str | None = Field(None, description="项目负责人邮箱")
+    doctor_enrollment_count: int = Field(description="医生入组人数")
+    patient_enrollment_count: int = Field(description="患者入组人数")
+    hospital: str | None = Field(None, description="所属医院")
+    phone: str | None = Field(None, description="手机号")
+    status: int = Field(description="项目状态：0-保存草稿，1-创建立项")
+
+class GetProjectDetailResponse(BaseResponse):
+    """
+    获取项目详情的响应模型
+    字段：
+        data: 项目详情信息（ProjectDetailInfo）
+    """
+    data: ProjectDetailInfo | None = None
+
+class GetProjectStageStatsRequest(BaseModel):
+    """
+    获取项目阶段统计的请求模型
+    参数：
+        project_id: 项目ID
+    """
+    project_id: int = Field(..., description="项目ID")
+
+
+class GetProjectStageStatsResponse(BaseResponse):
+    """
+    获取项目阶段统计的响应模型
+    字段：
+        data: 统计信息字典，包含病人资料和测序数据的覆盖率与阶段进展
+    """
+    data: dict | None = None  # 见接口说明
+
+# 项目完整信息模型，包含项目表所有字段，供项目列表/详情接口使用
+class ProjectFullInfo(BaseModel):
+    project_id: int  # 项目ID
+    name: str  # 项目名称
+    project_code: str | None = None  # 项目编号
+    short_name: str | None = None  # 项目简称
+    description: str | None = None  # 项目简介
+    project_type: str | None = None  # 项目类型
+    indication: str | None = None  # 适应症
+    study_phase: str | None = None  # 研究分期
+    is_multicenter: str | None = None  # 是否多中心
+    registration_number: str | None = None  # 注册号
+    registration_platform_url: str | None = None  # 注册平台链接
+    principal_investigator: str | None = None  # 项目负责人
+    pi_email: str | None = None  # 项目负责人邮箱
+    hospital: str | None = None  # 所属医院
+    phone: str | None = None  # 联系电话
+    patient_enrollment_count: int | None = None  # 患者入组人数
+    doctor_enrollment_count: int | None = None  # 医生入组人数
+    status: int  # 项目状态
+    created_at: str | None = None  # 创建时间
+    updated_at: str | None = None  # 更新时间
+    created_by: str | None = None  # 创建者unionid
+
+# 项目完整信息列表响应模型，projects为ProjectFullInfo列表
+class ProjectFullListResponse(BaseResponse):
+    projects: list[ProjectFullInfo] = []  # 项目完整信息列表
+
+# 病人完整信息模型，包含病人表所有字段，供项目下病人列表/详情接口使用
+class PatientFullInfo(BaseModel):
+    patient_id: int  # 病人ID
+    project_id: int  # 所属项目ID
+    source_id: int | None = None  # 源文件ID
+    medical_record_number: str | None = None  # 病历号
+    name: str  # 患者姓名
+    gender: str | None = None  # 性别
+    birth_date: str | None = None  # 出生日期
+    phone: str | None = None  # 联系电话
+    email: str | None = None  # 电子邮箱
+    hospital: str | None = None  # 就诊医院
+    blood_type: str | None = None  # 血型
+    tumor_type: str | None = None  # 肿瘤类型
+    HLA_type: str | None = None  # HLA分型
+    CDR_type: str | None = None  # CDR数据
+    treatment_state: str | None = None  # 治疗阶段
+    additional_info: str | None = None  # 附加信息
+    clinical_medication: str | None = None  # 临床用药
+    clinical_diagnosis: str | None = None  # 临床诊断
+    status: str  # 病历状态
+    created_by: str  # 创建者unionid
+    created_at: str | None = None  # 创建时间
+    updated_at: str | None = None  # 更新时间
+
+# 病人完整信息列表响应模型，data为PatientFullInfo列表
+class PatientFullListResponse(BaseResponse):
+    data: list[PatientFullInfo] = []  # 病人完整信息列表
 

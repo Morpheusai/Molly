@@ -12,7 +12,8 @@ __all__ = [
     'QuestionModel',
     'PredictionModel',
     'PredictionDetailModel',
-    'ToolModel'
+    'ToolModel',
+    'ProjectMemberModel'
 ]
 
 from .user_model import UserModel
@@ -27,3 +28,4 @@ from .question_model import QuestionModel
 from .prediction_model import PredictionModel
 from .prediction_details_model import PredictionDetailModel
 from .tool_model import ToolModel 
+from .project_member_model import ProjectMemberModel 

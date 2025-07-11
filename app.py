@@ -5,7 +5,8 @@ import os
 from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException, FastAPI, Request
+from celery import Celery
+from fastapi import Depends, FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 # from fastapi.responses import JSONResponse
@@ -25,26 +26,33 @@ from src.api.api import (
     get_conversation_messages,
     get_workflow_status,
     get_patient_prediction_details,
-    handle_tool_input_output
+    handle_tool_input_output,
+    handle_ai_message_url,
+    get_project_detail,
+    get_project_stage_stats
 )
-from src.api.protocols import UserInput, AddUserRequest, PredictUserInputRequest, PredictUserInputAgentRequest,CustomPredictUserInputRequest
+from src.api.protocols import UserInput, AddUserRequest, PredictUserInputRequest, PredictUserInputAgentRequest,CustomPredictUserInputRequest, ProjectFullListResponse, PatientFullListResponse
 # from src.db.uploadfiles_model import UploadedFile
 from src.db.conversation_model import ConversationModel
 from src.db.patient_model import PatientModel
 from src.db.workflows_model import WorkflowModel
 from src.db.prediction_model import PredictionModel
+from src.config import g_config
 from src.file.download_router import router as download_router
 from src.file.display_router import router as display_router
 from src.file.upload_sequence_files_router import router as upload_router
 from src.file.extract_patient_info_router import router as extract_router
 # from src.file.migrate import router as files_migrate
 from src.file.markdown_download_router import router as markdown_download_file
-from src.model.predict_openai_engine import predict_proxy_stream_generator
 from src.utils import logger
 from src.utils.jwt_util import create_system_token, decode_vaild
 from src.utils.mysql_db import search_unionid_sql, insert_message_sql,get_conversation_id_by_patient_and_type_sql
-from src.utils.session import get_async_db, AsyncSessionLocal
-# from src.utils.weblogo_generate import router as weblogo_generate
+from src.utils.session import get_async_db, get_async_session_local
+
+agent_broker_url = g_config["url"]["agent_broker_url"]
+
+celery_agent = Celery( "celery_task_agent", broker=agent_broker_url)
+
 
 
 logger.info(
@@ -295,7 +303,7 @@ async def backend_chat_with_files(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return await generate_error_response("unionid不存在")
+            raise HTTPException(status_code=401, detail="无效的用户认证")
 
         # 3. 通过conversation_id查找会话和病人
         conversation_id = user_input.conversation_id
@@ -347,8 +355,8 @@ async def backend_chat_with_files(
         # === 关键：predict_id 一定用新建的 prediction_id ===
         agent_request = PredictUserInputAgentRequest(
             prompt="使用默认参数，开始预测",
-            conversation_id=str(conversation_id),
-            patient_id=str(patient_id),
+            conversation_id=conversation_id,
+            patient_id=patient_id,
             predict_id=prediction_id,
             file_path=user_input.file_path,
             mhc_allele=mhc_allele,
@@ -383,17 +391,10 @@ async def backend_chat_with_files(
             except Exception as e:
                 logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
         
-        # 7. 返回流式响应
-        return StreamingResponse(
-            predict_proxy_stream_generator(agent_request, conversation_id, on_complete),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
-
+        celery_agent.send_task("src.utils.celery_task_agent.run_and_consume_generator", args=[agent_request.dict(), conversation_id, patient_id, unionid])
+        return {"ok": 0, "failed": ""}
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.exception("处理请求时发生未捕获的异常:")
         return await generate_error_response(str(e))
@@ -448,7 +449,7 @@ async def predict_antigen_with_custom_params(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return await generate_error_response("unionid不存在")
+            raise HTTPException(status_code=401, detail="无效的用户认证")
 
         # 3. 通过conversation_id查找会话和病人
         conversation_id = await get_conversation_id_by_patient_and_type_sql(int(user_input.patient_id), "predict_neo_antigen")
@@ -500,8 +501,8 @@ async def predict_antigen_with_custom_params(
         # === 关键：predict_id 一定用新建的 prediction_id ===
         agent_request = PredictUserInputAgentRequest(
             prompt="完成自定义参数收集，开始预测",
-            conversation_id=str(conversation_id),
-            patient_id=str(patient_id),
+            conversation_id=conversation_id,
+            patient_id=patient_id,
             predict_id=prediction_id,
             file_path=user_input.parameters['netchop']['input_filename'],
             mhc_allele=mhc_allele,
@@ -536,17 +537,12 @@ async def predict_antigen_with_custom_params(
             except Exception as e:
                 logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
         
-        # 7. 返回流式响应
-        return StreamingResponse(
-            predict_proxy_stream_generator(agent_request, conversation_id, on_complete),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
-
+        celery_agent.send_task("src.utils.celery_task_agent.run_and_consume_generator", args=[agent_request.dict(), conversation_id, patient_id, unionid])
+  
+        
+        return {"ok": 0, "failed": ""}
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.exception("处理请求时发生未捕获的异常:")
         return await generate_error_response(str(e))
@@ -561,13 +557,13 @@ app.post("/backend/create_medical_records",
          tags=["病人信息"], summary="创建病历")(create_medical_records)
 
 app.post("/backend/get_project_patients",
-         tags=["病人数据"], summary="获取指定项目下的所有病人列表（id和姓名）")(get_project_patients)
+         tags=["病人数据"], summary="获取指定项目下的所有病人详细信息")(get_project_patients)
 
 app.post("/backend/get_patient_detail",
          tags=["病人数据"], summary="获取指定病人详细信息（不含id/source_id/created_at）")(get_patient_detail)
 
 app.post("/backend/create_project",
-         tags=["项目管理"], summary="创建项目")(create_project)
+         tags=["项目管理"], summary="创建或更新项目")(create_project)
 
 app.post("/backend/get_projects",
          tags=["项目管理"], summary="获取当前用户的所有项目列表")(get_projects_by_token)
@@ -583,8 +579,13 @@ app.post("/backend/get_workflow_status", tags=["工作流"], summary="获取工�
 
 app.post("/backend/get_patient_prediction_details", tags=["预测详情"], summary="获取病人下所有预测详情")(get_patient_prediction_details)
 
-app.post("/backend/handle_tool_input_output", tags=["工具管理"], summary="处理工具输入输出参数")(handle_tool_input_output)
+app.post("/backend/handle_tool_input_output", tags=["agent服务器接口"], summary="处理agent服务器的工具输入输出参数")(handle_tool_input_output)
 
+app.post("/backend/handle_ai_message", tags=["agent服务器接口"], summary="处理agent服务器的AI消息追加或新建")(handle_ai_message_url)
+
+app.post("/backend/get_project_detail", tags=["项目管理"], summary="获取项目详情信息")(get_project_detail)
+
+app.post("/backend/get_project_stage_stats", tags=["项目管理"], summary="获取项目阶段统计信息")(get_project_stage_stats)
 
 app.include_router(download_router, prefix="/backend")
 app.include_router(display_router, prefix="/backend")

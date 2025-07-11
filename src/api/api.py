@@ -2,6 +2,7 @@ from fastapi import Depends, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
+from fastapi import HTTPException
 
 from src.utils.mysql_db import *
 # from src.utils.mysql_db import search_sessions_sql
@@ -10,8 +11,8 @@ from src.utils.session import with_async_session
 from .protocols import *
 from src.utils.jwt_util import decode_vaild
 from src.utils import logger
-from src.api.protocols import  CreateConversationRequest, CreateConversationResponse, PredictionDetailListResponse, PredictionDetailItem
-from src.utils.mysql_db import create_conversation_sql, get_conversation_id_by_patient_and_type_sql
+from src.api.protocols import  CreateConversationRequest, CreateConversationResponse, PredictionDetailListResponse, PredictionDetailItem, HandleAIMessageRequest, HandleAIMessageResponse, GetProjectDetailRequest, GetProjectDetailResponse, ProjectDetailInfo, GetProjectStageStatsRequest, GetProjectStageStatsResponse, ProjectFullListResponse, ProjectFullInfo, PatientFullListResponse, PatientFullInfo
+from src.utils.mysql_db import create_conversation_sql, get_conversation_id_by_patient_and_type_sql, handle_ai_message_sql
 from src.db import PatientModel, WorkflowModel
 from fastapi import APIRouter
 
@@ -140,16 +141,12 @@ async def create_medical_records(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if unionid is None:
-            return CreateMedicalRecordResponse(
-                ok=1,
-                failed="无效的用户认证",
-                patient_id=None
-            )
+            raise HTTPException(status_code=401, detail="无效的用户认证")
         # 创建病历记录
         result = await create_medical_records_sql(session, request, unionid)
         
         # 如果创建病历成功，创建工作流记录
-        if result.ok == 0 and result.patient_id:
+        if result.ok == 0 and result.patient_id and request.patient_id=="":
             # 创建3个不同stage的工作流记录
             workflow_stages = [
                 {'stage': '病历上传', 'rank': 1, 'status': 'completed'},
@@ -174,6 +171,8 @@ async def create_medical_records(
             await session.commit()
             
         return result
+    except HTTPException as e:
+        raise e    
     except Exception as e:
         logger.error(f"创建病历失败: {e}", exc_info=True)
         return CreateMedicalRecordResponse(
@@ -196,7 +195,7 @@ async def get_user_patients_info(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return UserPatientsFilesResponse(ok=1, failed="无效的用户认证", patients=[])
+            raise HTTPException(status_code=401, detail="无效的用户认证")
         # 3. 查询数据库，获取病人及文件信息
         data = await get_patients_by_unionid_sql(unionid)
         # 4. 组装响应数据
@@ -224,6 +223,8 @@ async def get_user_patients_info(
                 files=files
             ))
         return UserPatientsFilesResponse(ok=0, failed="", patients=patients)
+    except HTTPException as e:
+        raise e    
     except Exception as e:
         logger.error(f"查询用户病人及文件信息失败: {e}", exc_info=True)
         return UserPatientsFilesResponse(ok=1, failed=str(e), patients=[])
@@ -240,10 +241,12 @@ async def get_all_patients(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return PatientBriefListResponse(ok=1, failed="无效的用户认证")
+            raise HTTPException(status_code=401, detail="无效的用户认证")
         # 查询数据库，获取病人id和姓名
         data = await get_patients_brief_by_unionid_sql(unionid)
         return PatientBriefListResponse(ok=0, failed="", data=data)
+    except HTTPException as e:
+        raise e    
     except Exception as e:
         logger.error(f"查询用户病人简要信息失败: {e}", exc_info=True)
         return PatientBriefListResponse(ok=1, failed=str(e))
@@ -260,25 +263,27 @@ async def get_patient_detail(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return PatientDetailResponse(ok=1, failed="无效的用户认证")
+            raise HTTPException(status_code=401, detail="无效的用户认证")
         data = await get_patient_detail_by_id_sql(request.patient_id)
         if not data:
             return PatientDetailResponse(ok=1, failed="未找到该病人")
         return PatientDetailResponse(ok=0, failed="", data=PatientDetailInfo(**data))
+    except HTTPException as e:
+        raise e    
     except Exception as e:
         logger.error(f"查询病人详细信息失败: {e}", exc_info=True)
         return PatientDetailResponse(ok=1, failed=str(e))
 
-# 创建项目
+# 创建或更新项目
 async def create_project(
         session: AsyncSession = Depends(get_async_db),
         request: CreateProjectRequest = Body(...),
         credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
     """
-    创建新的项目
+    创建新项目或更新现有项目
     Args:
-        request: 创建项目请求对象
+        request: 创建项目请求对象（如果包含project_id则更新，否则创建）
         credentials: HTTP认证凭据
         session: 数据库会话
     Returns:
@@ -289,53 +294,60 @@ async def create_project(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return CreateProjectResponse(ok=1, failed="无效的用户认证", project_id=None)
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+        # 直接传递所有字段
         return await create_project_sql(session, request, unionid)
+    except HTTPException as e:
+        raise e    
     except Exception as e:
-        logger.error(f"创建项目失败: {e}", exc_info=True)
+        logger.error(f"创建或更新项目失败: {e}", exc_info=True)
         return CreateProjectResponse(ok=1, failed=str(e), project_id=None)
 
 # 查询用户下所有项目
 async def get_projects_by_token(
     session: AsyncSession = Depends(get_async_db),
     credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> ProjectListResponse:
+) -> ProjectFullListResponse:
     """
-    通过token获取unionid，返回该用户下所有项目名称
+    通过token获取unionid，返回该用户下所有项目详细信息
     """
     try:
         system_token = credentials.credentials
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return ProjectListResponse(ok=1, failed="无效的用户认证", projects=[])
+            raise HTTPException(status_code=401, detail="无效的用户认证")
         data = await get_projects_by_unionid_sql(session,unionid)
-        projects = [ProjectInfo(**p) for p in data]
-        return ProjectListResponse(ok=0, failed="", projects=projects)
+        projects = [ProjectFullInfo(**p) for p in data]
+        return ProjectFullListResponse(ok=0, failed="", projects=projects)
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"查询项目列表失败: {e}", exc_info=True)
-        return ProjectListResponse(ok=1, failed=str(e), projects=[])
+        return ProjectFullListResponse(ok=1, failed=str(e), projects=[])
 
 # 查询项目下所有病人简要信息（id和姓名）
 async def get_project_patients(
     request: GetProjectPatientsRequest = Body(...),
     credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> PatientBriefListResponse:
+) -> PatientFullListResponse:
     """
-    输入项目id和token，返回该项目下所有病人的id和姓名
+    输入项目id和token，返回该项目下所有病人详细信息
     """
     try:
         system_token = credentials.credentials
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return PatientBriefListResponse(ok=1, failed="无效的用户认证")
-        # 查询数据库，获取该项目下病人id和姓名
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+        # 查询数据库，获取该项目下病人所有字段
         data = await get_patients_brief_by_project_sql(request.project_id)
-        return PatientBriefListResponse(ok=0, failed="", data=data)
+        return PatientFullListResponse(ok=0, failed="", data=[PatientFullInfo(**p) for p in data])
+    except HTTPException as e:
+        raise e    
     except Exception as e:
         logger.error(f"查询项目下病人简要信息失败: {e}", exc_info=True)
-        return PatientBriefListResponse(ok=1, failed=str(e))
+        return PatientFullListResponse(ok=1, failed=str(e), data=[])
 
 async def get_patient_files(
     request: PatientDetailRequest = Body(...),
@@ -349,13 +361,15 @@ async def get_patient_files(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return PatientFilesResponse(ok=1, failed="无效的用户认证")
+            raise HTTPException(status_code=401, detail="无效的用户认证")
         
         # 调用数据库函数，传入file_type
         data = await get_patient_files_sql(request.patient_id, request.file_type)
         
         files = [FileInfo(**f) for f in data["files"]]
         return PatientFilesResponse(ok=0, failed="", files=files, total=data["total"])
+    except HTTPException as e:
+        raise e    
     except Exception as e:
         logger.error(f"查询病人文件失败: {e}", exc_info=True)
         return PatientFilesResponse(ok=1, failed=str(e), files=[], total=0)
@@ -370,7 +384,7 @@ async def create_conversation(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return CreateConversationResponse(ok=1, failed="无效的用户认证", conversation_id=None)
+            raise HTTPException(status_code=401, detail="无效的用户认证")
         # 新增逻辑：如果已存在predict_neo_antigen类型的会话，直接返回
         if request.conversation_type == "predict_neo_antigen":
             conversation_id = await get_conversation_id_by_patient_and_type_sql(int(request.patient_id), "predict_neo_antigen")
@@ -385,6 +399,8 @@ async def create_conversation(
         if result["ok"] != 0:
             return CreateConversationResponse(ok=1, failed=result["failed"], conversation_id=None)
         return CreateConversationResponse(ok=0, failed="", conversation_id=result["conversation_id"])
+    except HTTPException as e:
+        raise e    
     except Exception as e:
         logger.error(f"创建会话失败: {e}", exc_info=True)
         return CreateConversationResponse(ok=1, failed=str(e), conversation_id=None)
@@ -409,7 +425,7 @@ async def get_conversation_messages(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return ConversationMessagesResponse(ok=1, failed="无效的用户认证", messages=[])
+            raise HTTPException(status_code=401, detail="无效的用户认证")
         # 2. 查找conversation_id
         conversation_id = await get_conversation_id_by_patient_and_type_sql(request.patient_id, request.conversation_type)
         if not conversation_id:
@@ -420,6 +436,8 @@ async def get_conversation_messages(
         messages = [MessageInfo(**msg) for msg in messages_data]
         # 5. 返回成功响应
         return ConversationMessagesResponse(ok=0, failed="", messages=messages)
+    except HTTPException as e:
+        raise e    
     except Exception as e:
         logger.error(f"获取会话消息失败: {e}", exc_info=True)
         return ConversationMessagesResponse(ok=1, failed=str(e), messages=[])
@@ -436,7 +454,7 @@ async def get_workflow_status(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return GetWorkflowStatusResponse(ok=1, failed="无效的用户认证")
+            raise HTTPException(status_code=401, detail="无效的用户认证")
         
         data = await get_workflow_status_by_patient_id_sql(request.patient_id)
         if not data:
@@ -445,6 +463,8 @@ async def get_workflow_status(
         # 将数据转换为WorkflowStatusInfo列表
         workflow_status_list = [WorkflowStatusInfo(**item) for item in data]
         return GetWorkflowStatusResponse(ok=0, failed="", data=workflow_status_list)
+    except HTTPException as e:
+        raise e    
     except Exception as e:
         logger.error(f"获取工作流状态失败: {e}", exc_info=True)
         return GetWorkflowStatusResponse(ok=1, failed=str(e), data=None)
@@ -462,17 +482,29 @@ async def get_patient_prediction_details(
         payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if not unionid:
-            return PredictionDetailListResponse(ok=1, failed="无效的用户认证", details=[])
+            raise HTTPException(status_code=401, detail="无效的用户认证")
         data = await get_prediction_groups_by_patient_id_sql(request.patient_id)
         groups = [PredictionGroup(
             prediction_id=group["prediction_id"],
             create_time=group["create_time"],
             prediction_details=[PredictionDetailItem(**item) for item in group["prediction_details"]]
         ) for group in data]
-        return PredictionDetailListResponse(ok=0, failed="", details=groups)
+        
+        # 计算flag值：时间最新的PredictionGroup中最大rank对应的flag值
+        flag = 0
+        if groups:
+            latest_group = groups[0]  # 按时间降序，第一个就是最新的
+            if latest_group.prediction_details:
+                # 找到最大rank的PredictionDetailItem
+                max_rank_detail = max(latest_group.prediction_details, key=lambda x: x.rank)
+                flag = max_rank_detail.flag
+        
+        return PredictionDetailListResponse(ok=0, failed="", details=groups, flag=flag)
+    except HTTPException as e:
+        raise e    
     except Exception as e:
         logger.error(f"查询病人PredictionGroup失败: {e}", exc_info=True)
-        return PredictionDetailListResponse(ok=1, failed=str(e), details=[])
+        return PredictionDetailListResponse(ok=1, failed=str(e), details=[], flag=0)
 
 # 新增：处理工具输入输出参数
 async def handle_tool_input_output(
@@ -502,3 +534,63 @@ async def handle_tool_input_output(
     except Exception as e:
         logger.error(f"处理工具输入输出失败: {e}", exc_info=True)
         return ToolInputOutputResponse(ok=1, failed=str(e), predict_detail_id=None)
+
+# 新增：处理AI消息接口
+async def handle_ai_message_url(
+    request: HandleAIMessageRequest = Body(...)
+) -> HandleAIMessageResponse:
+    """
+    处理AI消息：如果最新消息不是assistant则新建，否则追加内容。
+    Args:
+        request: HandleAIMessageRequest
+    Returns:
+        HandleAIMessageResponse
+    """
+    try:
+        result = await handle_ai_message_sql(request)
+        return result
+    except Exception as e:
+        logger.error(f"处理AI消息失败: {e}", exc_info=True)
+        return HandleAIMessageResponse(ok=1, failed=str(e), message_id=None, content=None)
+
+# 展示项目内容信息接口
+async def get_project_detail(
+    request: GetProjectDetailRequest = Body(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    session: AsyncSession = Depends(get_async_db),
+) -> GetProjectDetailResponse:
+    """
+    输入token和project_id，返回项目详情（包含所有字段信息）
+    """
+    try:
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+        data = await get_project_detail_by_id_sql(request.project_id)
+        if not data:
+            return GetProjectDetailResponse(ok=1, failed="未找到该项目", data=None)
+        return GetProjectDetailResponse(ok=0, failed="", data=ProjectDetailInfo(**data))
+    except HTTPException as e:
+        raise e    
+    except Exception as e:
+        logger.error(f"查询项目详情失败: {e}", exc_info=True)
+        return GetProjectDetailResponse(ok=1, failed=str(e), data=None)
+
+# 项目阶段统计接口
+async def get_project_stage_stats(
+    request: GetProjectStageStatsRequest = Body(...),
+    session: AsyncSession = Depends(get_async_db),
+) -> GetProjectStageStatsResponse:
+    """
+    输入项目id，输出病人资料和测序数据的覆盖率与阶段进展
+    """
+    try:
+        data = await get_project_stage_stats_sql(request.project_id)
+        if not data:
+            return GetProjectStageStatsResponse(ok=1, failed="未找到该项目或统计失败", data=None)
+        return GetProjectStageStatsResponse(ok=0, failed="", data=data)
+    except Exception as e:
+        logger.error(f"项目阶段统计失败: {e}", exc_info=True)
+        return GetProjectStageStatsResponse(ok=1, failed=str(e), data=None)

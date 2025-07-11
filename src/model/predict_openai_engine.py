@@ -199,7 +199,7 @@ async def predict_proxy_stream_generator(
                 # tool_result_analysis_list+=current_response
 
     # 处理消息
-    await predict_process_messages(conversation_id, ai_messages, tool_messages, tool_result_analysis_list, msg_response, tool_middle_result)
+    # await predict_process_messages(conversation_id, ai_messages, tool_messages, tool_result_analysis_list, msg_response, tool_middle_result)
     
     # 调用完成回调
     if on_complete:

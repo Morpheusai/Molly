@@ -20,9 +20,9 @@ class PatientModel(Base):
     
     # 医疗信息
     blood_type = Column(Enum('A', 'B', 'AB', 'O', 'unknown'))  # 血型：A/B/AB/O/未知
-    tumor_type = Column(String(32))  # 肿瘤类型/癌种
-    HLA_type = Column(String(64))  # HLA分型结果
-    CDR_type = Column(String(64))  # CDR(互补决定区)数据
+    tumor_type = Column(String(64))  # 肿瘤类型/癌种
+    HLA_type = Column(String(255))  # HLA分型结果
+    CDR_type = Column(String(255))  # CDR(互补决定区)数据
     treatment_state = Column(String(64))  # 治疗阶段状态
     additional_info = Column(Text)  # 附加信息/备注
     clinical_medication = Column(Text)  # 临床用药记录

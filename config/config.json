@@ -11,7 +11,8 @@
         "target_neo_antigen_stream_stream_url":"http://47.237.170.62:60718/neo_antigen_stream",
         "target_predict_neo_antigen_stream_stream_url":"http://47.237.170.62:60718/predict_neo_antigen_stream",
         "target_desc_url":"http://47.237.170.62:60718/description",
-        "target_extract_patient_info_url":"http://47.237.170.62:60718/extract_patient_info"
+        "target_extract_patient_info_url":"http://47.237.170.62:60718/extract_patient_info",
+        "agent_broker_url": "redis://localhost:16379/0"
     },
     "temp":{
         "upload_files_dir":"/mnt/tmp/upload",

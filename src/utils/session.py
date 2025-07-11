@@ -1,11 +1,14 @@
 from contextlib import asynccontextmanager
 from functools import wraps
+from src.utils.base import get_async_session_local
 
-from src.utils.base import AsyncSessionLocal
+
+
 
 
 @asynccontextmanager
 async def async_session_scope():
+    AsyncSessionLocal = get_async_session_local()
     session = AsyncSessionLocal()
     try:
         yield session
@@ -26,5 +29,6 @@ def with_async_session(f):
 
 
 async def get_async_db():
+    AsyncSessionLocal = get_async_session_local()
     async with AsyncSessionLocal() as db:
         yield db

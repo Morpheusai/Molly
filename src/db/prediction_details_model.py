@@ -16,6 +16,7 @@ class PredictionDetailModel(Base):
     end_time = Column(DateTime, comment='调用结束时间')
     elapsed_time = Column(Integer, comment='调用耗时')
     error_message = Column(String(255), comment='错误信息')
+    flag = Column(SmallInteger, nullable=False, default=0, comment='流程结束标志：0-未结束，1-已结束')
     create_time = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=False, comment='创建时间')
 
     patient = relationship('PatientModel', back_populates='prediction_details')

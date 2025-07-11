@@ -58,7 +58,7 @@ async def search_unionid_sql(session, unionid: str) -> Optional[UserModel]:
         UserModel实例 或 None（如果未找到）
     """
     if not unionid:
-        return None  # 空unionid直接返回None
+        raise HTTPException(status_code=401, detail="无效的用户认证")
     
     try:
         # 使用更明确的查询方式
@@ -104,161 +104,74 @@ async def add_user_sql(session,  request: AddUserRequest = None):
 
 # 创建病历记录
 async def create_medical_records_sql(session, request: CreateMedicalRecordRequest, unionid: str):
-    """
-    创建新的病历记录
-    Args:
-        request: 创建病历请求对象
-        unionid: 创建者用户ID
-    Returns:
-        BaseResponse实例
-    """
     try:
-        # 创建新的病历记录
-        patient = PatientModel(
-            project_id=request.project_id,
-            medical_record_number=request.medical_record_number if request.medical_record_number else "",
-            name=request.name if request.name else "",
-            gender=request.gender if request.gender else "other",
-            birth_date=datetime.strptime(request.birth_date, "%Y-%m-%d").date() if request.birth_date else None,
-            phone=request.phone if request.phone else "",
-            email=request.email if request.email else "",
-            hospital=request.hospital if request.hospital else "",
-            blood_type=request.blood_type if request.blood_type else "unknown",
-            tumor_type=request.tumor_type if request.tumor_type else "",
-            HLA_type=request.HLA_type if request.HLA_type else "",
-            CDR_type=request.CDR_type if request.CDR_type else "",
-            treatment_state=request.treatment_state if request.treatment_state else "",
-            additional_info=request.additional_info if request.additional_info else "",
-            clinical_medication=None,
-            clinical_diagnosis=None,
-            created_by=unionid,
-            status='new',
-            source_id=request.source_id if hasattr(request, 'source_id') else None
-        )
-        session.add(patient)
-        await session.commit()
-        await session.refresh(patient)
-
-        # # 新增：创建PredictionModel记录
-        # prediction = PredictionModel(
-        #     patient_id=patient.id,
-        #     result=None,
-        #     summary=None
-        # )
-        # session.add(prediction)
-        # await session.commit()
-        # await session.refresh(prediction)
-
-        # 新增：为该预测插入4条PredictionDetailModel记录
-        # now = datetime.now()
-        # details = [
-        #     PredictionDetailModel(
-        #         patient_id=patient.id,
-        #         prediction_id=prediction.id,
-        #         rank=1,
-        #         tool_name="Netchop",
-        #         tool_parameters={
-        #             "input_filename": "minio://molly/c7cbf447-835d-4049-bfce-a0166ab8ed0d_test.fasta",
-        #             "cleavage_site_threshold": 0.5,
-        #             "model": 0,
-        #             "format": 0,
-        #             "strict": 0
-        #         },
-        #         status="pending",
-        #         start_time=now,
-        #         end_time=now,
-        #         elapsed_time=None,
-        #         error_message=None,
-        #         tool_output={
-        #             "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
-        #             "content": "工具结果"
-        #         }
-        #     ),
-        #     PredictionDetailModel(
-        #         patient_id=patient.id,
-        #         prediction_id=prediction.id,
-        #         rank=2,
-        #         tool_name="Netctlpan",
-        #         tool_parameters={
-        #             "input_filename": "minio://molly/a66b7062-b6cb-4d0a-8258-50b869ac657b_test.fasta",
-        #             "mhc_allele": "HLA-A02:01,HLA-A02:02,HLA-A02:03,HLA-A02:04",
-        #             "peptide_length": 9,
-        #             "weight_of_tap": 0.025,
-        #             "weight_of_clevage": 0.225,
-        #             "epi_threshold": 1.0,
-        #             "output_threshold": -99.9,
-        #             "sort_by": -1
-        #         },
-        #         status="pending",
-        #         start_time=now,
-        #         end_time=now,
-        #         elapsed_time=None,
-        #         error_message=None,
-        #         tool_output={
-        #             "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
-        #             "content": "工具结果"
-        #         }
-        #     ),
-        #     PredictionDetailModel(
-        #         patient_id=patient.id,
-        #         prediction_id=prediction.id,
-        #         rank=3,
-        #         tool_name="Netmhcpan",
-        #         tool_parameters={
-        #             "input_filename": "minio://molly/c7cbf447-835d-4049-bfce-a0166ab8ed0d_test.fasta",
-        #             "mhc_allele": "HLA-A02:01,HLA-A02:02",
-        #             "peptide_length": -1,
-        #             "high_threshold_of_bp": 0.5,
-        #             "low_threshold_of_bp": 2.0,
-        #             "rank_cutoff": -99.9
-        #         },
-        #         status="pending",
-        #         start_time=now,
-        #         end_time=now,
-        #         elapsed_time=None,
-        #         error_message=None,
-        #         tool_output={
-        #             "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
-        #             "content": "工具结果"
-        #         }
-        #     ),
-        #     PredictionDetailModel(
-        #         patient_id=patient.id,
-        #         prediction_id=prediction.id,
-        #         rank=4,
-        #         tool_name="Bigmhcpan",
-        #         tool_parameters={
-        #             "input_filename": "minio://molly/c7cbf447-835d-4049-bfce-a0166ab8ed0d_test.fasta",
-        #             "mhc_allele": "HLA-A02:01,HLA-A02:02"
-        #         },
-        #         status="pending",
-        #         start_time=now,
-        #         end_time=now,
-        #         elapsed_time=None,
-        #         error_message=None,
-        #         tool_output={
-        #             "url": "minio://netchop-results/ecdef096ea4a4d7b91373e7b04486fea_NetChop_results.xlsx",
-        #             "content": "工具结果"
-        #         }
-        #     )
-        # ]
-        # session.add_all(details)
-        # await session.commit()
-
-        # 如果传了source_id，更新对应文件的patient_id
-        if getattr(request, 'source_id', None):
-            file_obj = await session.get(FileModel, request.source_id)
-            if file_obj:
-                file_obj.patient_id = patient.id
-                await session.commit()
-        return CreateMedicalRecordResponse(
-            ok=0,
-            failed="",
-            patient_id=patient.id
-        )
+        # 判断是新增还是修改
+        if request.patient_id and str(request.patient_id).isdigit():
+            # 修改模式
+            patient = await session.get(PatientModel, int(request.patient_id))
+            if not patient:
+                return CreateMedicalRecordResponse(ok=1, failed="未找到该病人", patient_id=None)
+            # 更新字段
+            patient.project_id = request.project_id
+            patient.medical_record_number = request.medical_record_number or ""
+            patient.name = request.name or ""
+            patient.gender = request.gender or "other"
+            patient.birth_date = datetime.strptime(request.birth_date, "%Y-%m-%d").date() if request.birth_date else None
+            patient.phone = request.phone or ""
+            patient.email = request.email or ""
+            patient.hospital = request.hospital or ""
+            patient.blood_type = request.blood_type or "unknown"
+            patient.tumor_type = request.tumor_type or ""
+            patient.HLA_type = request.HLA_type or ""
+            patient.CDR_type = request.CDR_type or ""
+            patient.treatment_state = request.treatment_state or ""
+            patient.additional_info = request.additional_info or ""
+            patient.source_id = request.source_id if hasattr(request, 'source_id') else None
+            patient.clinical_medication = request.clinical_medication or ""
+            patient.clinical_diagnosis = request.clinical_diagnosis or ""
+            # 这里不更新created_by/status等只读字段
+            await session.commit()
+            return CreateMedicalRecordResponse(ok=0, failed="", patient_id=patient.id)
+        else:
+            # 原有创建逻辑
+            patient = PatientModel(
+                project_id=request.project_id,
+                medical_record_number=request.medical_record_number if request.medical_record_number else "",
+                name=request.name if request.name else "",
+                gender=request.gender if request.gender else "other",
+                birth_date=datetime.strptime(request.birth_date, "%Y-%m-%d").date() if request.birth_date else None,
+                phone=request.phone if request.phone else "",
+                email=request.email if request.email else "",
+                hospital=request.hospital if request.hospital else "",
+                blood_type=request.blood_type if request.blood_type else "unknown",
+                tumor_type=request.tumor_type if request.tumor_type else "",
+                HLA_type=request.HLA_type if request.HLA_type else "",
+                CDR_type=request.CDR_type if request.CDR_type else "",
+                treatment_state=request.treatment_state if request.treatment_state else "",
+                additional_info=request.additional_info if request.additional_info else "",
+                clinical_medication=request.clinical_medication or "",
+                clinical_diagnosis=request.clinical_diagnosis or "",
+                created_by=unionid,
+                status='new',
+                source_id=request.source_id if hasattr(request, 'source_id') else None
+            )
+            session.add(patient)
+            await session.commit()
+            await session.refresh(patient)
+            # 如果传了source_id，更新对应文件的patient_id
+            if getattr(request, 'source_id', None):
+                file_obj = await session.get(FileModel, request.source_id)
+                if file_obj:
+                    file_obj.patient_id = patient.id
+                    await session.commit()
+            return CreateMedicalRecordResponse(
+                ok=0,
+                failed="",
+                patient_id=patient.id
+            )
     except Exception as e:
         await session.rollback()
-        logger.error(f"创建病历失败: {e}", exc_info=True)
+        logger.error(f"创建/修改病历失败: {e}", exc_info=True)
         return CreateMedicalRecordResponse(
             ok=1,
             failed=str(e),
@@ -375,7 +288,7 @@ async def get_patient_detail_by_id_sql(session, patient_id: int):
 
 async def create_project_sql(session, request: CreateProjectRequest, unionid: str):
     """
-    创建新的项目记录
+    创建或更新项目记录
     Args:
         request: 创建项目请求对象
         unionid: 创建者用户ID
@@ -383,21 +296,82 @@ async def create_project_sql(session, request: CreateProjectRequest, unionid: st
         CreateProjectResponse实例
     """
     try:
-        project = ProjectModel(
-            name=request.name,
-            created_by=unionid
-        )
-        session.add(project)
-        await session.commit()
-        await session.refresh(project)
-        return CreateProjectResponse(
-            ok=0,
-            failed="",
-            project_id=project.id
-        )
+        # 如果传入了project_id，则更新现有项目
+        if request.project_id is not None:
+            project = await session.get(ProjectModel, request.project_id)
+            if not project:
+                return CreateProjectResponse(
+                    ok=1,
+                    failed="项目不存在",
+                    project_id=None
+                )
+            
+            # 验证项目是否属于当前用户
+            if project.created_by != unionid:
+                return CreateProjectResponse(
+                    ok=1,
+                    failed="无权修改此项目",
+                    project_id=None
+                )
+            
+            # 更新项目信息
+            project.name = request.name
+            project.project_code = request.project_code
+            project.short_name = request.short_name
+            project.description = request.description
+            project.project_type = request.project_type
+            project.indication = request.indication
+            project.study_phase = request.study_phase
+            project.is_multicenter = request.is_multicenter
+            project.registration_number = request.registration_number
+            project.registration_platform_url = request.registration_platform_url
+            project.principal_investigator = request.principal_investigator
+            project.pi_email = request.pi_email
+            project.hospital = request.hospital
+            project.phone = request.phone
+            project.patient_enrollment_count = request.patient_enrollment_count
+            project.status = request.status
+            project.updated_at = datetime.now()
+            
+            await session.commit()
+            await session.refresh(project)
+            return CreateProjectResponse(
+                ok=0,
+                failed="",
+                project_id=project.id
+            )
+        else:
+            # 创建新项目
+            project = ProjectModel(
+                name=request.name,
+                created_by=unionid,
+                project_code=request.project_code,
+                short_name=request.short_name,
+                description=request.description,
+                project_type=request.project_type,
+                indication=request.indication,
+                study_phase=request.study_phase,
+                is_multicenter=request.is_multicenter,
+                registration_number=request.registration_number,
+                registration_platform_url=request.registration_platform_url,
+                principal_investigator=request.principal_investigator,
+                pi_email=request.pi_email,
+                hospital=request.hospital,
+                phone=request.phone,
+                patient_enrollment_count=request.patient_enrollment_count,
+                status=request.status
+            )
+            session.add(project)
+            await session.commit()
+            await session.refresh(project)
+            return CreateProjectResponse(
+                ok=0,
+                failed="",
+                project_id=project.id
+            )
     except Exception as e:
         await session.rollback()
-        logger.error(f"创建项目失败: {e}", exc_info=True)
+        logger.error(f"创建或更新项目失败: {e}", exc_info=True)
         return CreateProjectResponse(
             ok=1,
             failed=str(e),
@@ -407,19 +381,38 @@ async def create_project_sql(session, request: CreateProjectRequest, unionid: st
 
 async def get_projects_by_unionid_sql(session, unionid: str):
     """
-    查询指定unionid下所有项目
-    Args:
-        unionid: 用户唯一标识
-    Returns:
-        list[dict]，每个dict包含project_id和name
+    查询指定unionid下所有项目，返回所有字段
     """
     try:
         projects = await session.execute(
-            select(ProjectModel.id, ProjectModel.name).where(ProjectModel.created_by == unionid)
+            select(ProjectModel)
+            .where(ProjectModel.created_by == unionid)
         )
-        result = [
-            {"project_id": row.id, "name": row.name} for row in projects.all()
-        ]
+        result = []
+        for project in projects.scalars().all():
+            result.append({
+                "project_id": project.id,
+                "name": project.name,
+                "project_code": project.project_code,
+                "short_name": project.short_name,
+                "description": project.description,
+                "project_type": project.project_type,
+                "indication": project.indication,
+                "study_phase": project.study_phase,
+                "is_multicenter": project.is_multicenter,
+                "registration_number": project.registration_number,
+                "registration_platform_url": project.registration_platform_url,
+                "principal_investigator": project.principal_investigator,
+                "pi_email": project.pi_email,
+                "hospital": project.hospital,
+                "phone": project.phone,
+                "patient_enrollment_count": project.patient_enrollment_count,
+                "doctor_enrollment_count": getattr(project, 'doctor_enrollment_count', None),
+                "status": project.status,
+                "created_at": project.created_at.strftime('%Y-%m-%d %H:%M:%S') if project.created_at else None,
+                "updated_at": project.updated_at.strftime('%Y-%m-%d %H:%M:%S') if project.updated_at else None,
+                "created_by": project.created_by
+            })
         return result
     except Exception as e:
         logger.error(f"查询项目列表失败: {e}", exc_info=True)
@@ -428,15 +421,39 @@ async def get_projects_by_unionid_sql(session, unionid: str):
 @with_async_session
 async def get_patients_brief_by_project_sql(session, project_id: int):
     """
-    查询指定项目下所有病人的id和姓名
+    查询指定项目下所有病人，返回所有字段
     """
     try:
         patients = await session.execute(
-            select(PatientModel.id, PatientModel.name,PatientModel.medical_record_number).where(PatientModel.project_id == project_id)
+            select(PatientModel)
+            .where(PatientModel.project_id == project_id)
         )
-        result = [
-            {"patient_id": row.id, "name": row.name,"medical_record_number":row.medical_record_number} for row in patients.all()
-        ]
+        result = []
+        for patient in patients.scalars().all():
+            result.append({
+                "patient_id": patient.id,
+                "project_id": patient.project_id,
+                "source_id": patient.source_id,
+                "medical_record_number": patient.medical_record_number,
+                "name": patient.name,
+                "gender": patient.gender,
+                "birth_date": patient.birth_date.strftime('%Y-%m-%d') if patient.birth_date else None,
+                "phone": patient.phone,
+                "email": patient.email,
+                "hospital": patient.hospital,
+                "blood_type": patient.blood_type,
+                "tumor_type": patient.tumor_type,
+                "HLA_type": patient.HLA_type,
+                "CDR_type": patient.CDR_type,
+                "treatment_state": patient.treatment_state,
+                "additional_info": patient.additional_info,
+                "clinical_medication": patient.clinical_medication,
+                "clinical_diagnosis": patient.clinical_diagnosis,
+                "status": patient.status,
+                "created_by": patient.created_by,
+                "created_at": patient.created_at.strftime('%Y-%m-%d %H:%M:%S') if patient.created_at else None,
+                "updated_at": patient.updated_at.strftime('%Y-%m-%d %H:%M:%S') if patient.updated_at else None
+            })
         return result
     except Exception as e:
         logger.error(f"查询项目下病人简要信息失败: {e}", exc_info=True)
@@ -519,6 +536,14 @@ async def predict_process_messages(
 ):
     # 更新 message 表的 response 字段
     try:
+        # 检查msg_response是否为空或只包含空白字符
+        if not msg_response or msg_response.strip() == "":
+            logger.warning(f"msg_response为空，跳过创建assistant消息，conversation_id: {conversation_id}")
+            return BaseResponse(
+                ok=0,
+                failed=""
+            )
+        
         # 创建新的assistant类型消息记录
         new_message = MessageModel(
             conversation_id=conversation_id,
@@ -532,9 +557,11 @@ async def predict_process_messages(
         
         # 保存新创建的消息ID，供后续tool记录使用
         msg_id = new_message.id
+        logger.info(f"成功创建assistant消息，message_id: {msg_id}, conversation_id: {conversation_id}")
         
     except Exception as e:
         await session.rollback()
+        logger.error(f"创建assistant消息失败: {e}", exc_info=True)
         return BaseResponse(
             ok=1,
             failed=str(e)
@@ -636,6 +663,7 @@ async def insert_message_sql(session, conversation_id: int, type:str,content: st
     Args:
         session: 数据库会话
         conversation_id: 会话ID
+        type: 消息类型
         content: 消息内容
     Returns:
         新消息的id
@@ -653,7 +681,7 @@ async def insert_message_sql(session, conversation_id: int, type:str,content: st
         return new_message.id
     except Exception as e:
         await session.rollback()
-        logger.error(f"插入用户消息失败: {e}", exc_info=True)
+        logger.error(f"插入消息失败: {e}", exc_info=True)
         return None
 
 @with_async_session
@@ -809,7 +837,8 @@ async def get_prediction_groups_by_patient_id_sql(session, patient_id: int):
                     PredictionDetailModel.end_time,
                     PredictionDetailModel.elapsed_time,
                     PredictionDetailModel.error_message,
-                    PredictionDetailModel.tool_output
+                    PredictionDetailModel.tool_output,
+                    PredictionDetailModel.flag
                 ).where(PredictionDetailModel.prediction_id == pred.id)
                 .order_by(asc(PredictionDetailModel.rank))
             )
@@ -829,6 +858,7 @@ async def get_prediction_groups_by_patient_id_sql(session, patient_id: int):
                     "elapsed_time": row.elapsed_time,
                     "error_message": row.error_message,
                     "tool_output": tool_output,
+                    "flag": row.flag,
                     "prediction_create_time": pred.create_time.strftime('%Y-%m-%d %H:%M:%S') if pred.create_time else None
                 })
             result.append({
@@ -891,7 +921,8 @@ async def handle_tool_input_output_sql(session, request):
                 start_time=datetime.now(),
                 end_time=None,
                 elapsed_time=None,
-                error_message=None
+                error_message=None,
+                flag=request.flag
             )
             session.add(new_detail)
             await session.commit()
@@ -917,6 +948,7 @@ async def handle_tool_input_output_sql(session, request):
             detail.tool_output = parameters_json  # 存储JSON字符串
             detail.status = 'completed'
             detail.end_time = datetime.now()
+            detail.flag = request.flag  # 更新flag值
             if detail.start_time:
                 detail.elapsed_time = int((detail.end_time - detail.start_time).total_seconds())
             await session.commit()
@@ -931,3 +963,152 @@ async def handle_tool_input_output_sql(session, request):
         await session.rollback()
         logger.error(f"处理工具输入输出失败: {e}", exc_info=True)
         return ToolInputOutputResponse(ok=1, failed=str(e), predict_detail_id=None)
+
+@with_async_session
+async def handle_ai_message_sql(session, request: HandleAIMessageRequest):
+    """
+    处理AI消息：如果最新消息不是assistant则新建，否则追加内容。
+    简化版本：只基于消息类型判断，使用ID排序确保稳定性。
+    
+    Args:
+        session: 数据库会话
+        request: HandleAIMessageRequest
+    Returns:
+        HandleAIMessageResponse
+    """
+    try:
+        # 使用ID排序而不是时间排序，更稳定
+        messages = await session.execute(
+            select(MessageModel)
+            .where(MessageModel.conversation_id == request.conversation_id, MessageModel.is_deleted == 0)
+            .order_by(MessageModel.id.desc())
+        )
+        latest_msg = messages.scalars().first()
+        
+        # 如果没有消息或最新消息不是assistant类型，创建新消息
+        if not latest_msg or latest_msg.type != 'assistant':
+            logger.info(f"创建新的assistant消息，conversation_id: {request.conversation_id}")
+            # 新建assistant类型消息
+            new_message = MessageModel(
+                conversation_id=request.conversation_id,
+                type='assistant',
+                content=request.ai_message or "",
+                is_deleted=0
+            )
+            session.add(new_message)
+            await session.commit()
+            await session.refresh(new_message)
+            return HandleAIMessageResponse(ok=0, failed="", message_id=new_message.id, content=new_message.content)
+        
+        # 最新消息是assistant类型，进行合并
+        current_content = latest_msg.content or ""
+        new_content = request.ai_message or ""
+        
+        # 如果当前内容为空，直接设置新内容
+        if not current_content:
+            logger.info(f"当前消息内容为空，直接设置新内容，message_id: {latest_msg.id}")
+            latest_msg.content = new_content
+            await session.commit()
+            return HandleAIMessageResponse(ok=0, failed="", message_id=latest_msg.id, content=new_content)
+        
+        # 合并内容
+        logger.info(f"合并消息内容，message_id: {latest_msg.id}")
+        merged_content = current_content + new_content
+        latest_msg.content = merged_content
+        await session.commit()
+        return HandleAIMessageResponse(ok=0, failed="", message_id=latest_msg.id, content=merged_content)
+        
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"处理AI消息失败: {e}", exc_info=True)
+        return HandleAIMessageResponse(ok=1, failed=str(e), message_id=None, content=None)
+
+@with_async_session
+async def get_project_detail_by_id_sql(session, project_id: int):
+    """
+    根据项目ID查询项目详情（返回所有字段）
+    """
+    try:
+        project = await session.get(ProjectModel, project_id)
+        if not project:
+            return None
+        return {
+            'name': project.name,
+            'created_at': project.created_at.strftime('%Y-%m-%d %H:%M:%S') if project.created_at else '',
+            'updated_at': project.updated_at.strftime('%Y-%m-%d %H:%M:%S') if project.updated_at else '',
+            'project_code': project.project_code,
+            'short_name': project.short_name,
+            'description': project.description,
+            'project_type': project.project_type,
+            'indication': project.indication,
+            'study_phase': project.study_phase,
+            'is_multicenter': project.is_multicenter,
+            'registration_number': project.registration_number,
+            'registration_platform_url': project.registration_platform_url,
+            'principal_investigator': project.principal_investigator,
+            'pi_email': project.pi_email,
+            'doctor_enrollment_count': project.doctor_enrollment_count,
+            'patient_enrollment_count': project.patient_enrollment_count,
+            'hospital': project.hospital,
+            'phone': project.phone,
+            'status': project.status
+        }
+    except Exception as e:
+        logger.error(f"查询项目详情失败: {e}", exc_info=True)
+        return None
+
+@with_async_session
+async def get_project_stage_stats_sql(session, project_id: int):
+    """
+    统计项目下病人资料和测序数据的覆盖率与阶段进展
+    """
+    try:
+        # 获取项目表的patient_enrollment_count
+        project = await session.get(ProjectModel, project_id)
+        if not project:
+            return None
+        patient_enrollment_count = project.patient_enrollment_count
+        # 获取该项目下所有病人
+        patients = await session.execute(
+            select(PatientModel.id).where(PatientModel.project_id == project_id)
+        )
+        patient_ids = [row.id for row in patients.all()]
+        patient_count = len(patient_ids)
+        # 统计有测序数据完成的病人数量
+        seq_completed_count = 0
+        if patient_count > 0:
+            for pid in patient_ids:
+                workflow = await session.execute(
+                    select(WorkflowModel).where(
+                        WorkflowModel.patient_id == pid,
+                        WorkflowModel.stage == '测序数据',
+                        WorkflowModel.status == 'completed'
+                    )
+                )
+                if workflow.scalars().first():
+                    seq_completed_count += 1
+        return {
+            "patient_info": {
+                "coverage": {
+                    "numerator": patient_count,
+                    "denominator": patient_enrollment_count
+                },
+                "progress": {
+                    "numerator": patient_count,
+                    "denominator": patient_count
+                }
+            },
+            "sequencing_data": {
+                "coverage": {
+                    "numerator": patient_count,
+                    "denominator": patient_enrollment_count
+                },
+                "progress": {
+                    "numerator": seq_completed_count if patient_count > 0 else 0,
+                    "denominator": patient_count
+                }
+            }
+        }
+    except Exception as e:
+        logger.error(f"统计项目阶段进展失败: {e}", exc_info=True)
+        return None
