@@ -166,23 +166,23 @@ class CustomPredictUserInputRequest(BaseModel):
         }]
     )
 
-    @validator('parameters')
-    def validate_parameters(cls, v):
-        """验证parameters中必须包含netchop且其中必须包含input_filename"""
-        if not isinstance(v, dict):
-            raise ValueError('parameters必须是字典类型')
+    # @validator('parameters')
+    # def validate_parameters(cls, v):
+    #     """验证parameters中必须包含netchop且其中必须包含input_filename"""
+    #     if not isinstance(v, dict):
+    #         raise ValueError('parameters必须是字典类型')
         
-        if 'netchop' not in v:
-            raise ValueError('parameters中必须包含netchop字段')
+    #     if 'netchop' not in v:
+    #         raise ValueError('parameters中必须包含netchop字段')
             
-        netchop = v.get('netchop')
-        if not isinstance(netchop, dict):
-            raise ValueError('netchop必须是字典类型')
+    #     netchop = v.get('netchop')
+    #     if not isinstance(netchop, dict):
+    #         raise ValueError('netchop必须是字典类型')
             
-        if 'input_filename' not in netchop:
-            raise ValueError('netchop中必须包含input_filename字段')
+    #     if 'input_filename' not in netchop:
+    #         raise ValueError('netchop中必须包含input_filename字段')
             
-        return v
+    #     return v
 
 class PredictUserInputRequest(BaseModel):
     """Basic user input for the agent."""

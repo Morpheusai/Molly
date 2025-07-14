@@ -400,8 +400,8 @@ async def upload_attachment(file: UploadFile, patient_id: int, unionid: str, ses
         file_desc = await request_descagent(file.filename, file_data, file.content_type)
         logger.info(f'DescAgent return file_desc:{file_desc}')
         #TODO
-        # file_info["file_desc"] = file_desc
-        file_info["file_desc"] = "123"
+        file_info["file_desc"] = file_desc
+        # file_info["file_desc"] = "123"
 
         # 上传成功，插入数据库
         inserted_file = await insert_file_info_to_db(session, patient_id, unionid, file_info)

@@ -503,7 +503,7 @@ async def predict_antigen_with_custom_params(
             conversation_id=conversation_id,
             patient_id=patient_id,
             predict_id=prediction_id,
-            file_path=user_input.parameters['netchop']['input_filename'],
+            file_path=user_input.parameters['netctlpan']['input_filename'],
             mhc_allele=mhc_allele,
             cdr3=cdr3,
             parameters=user_input.parameters
