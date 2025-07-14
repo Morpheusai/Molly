@@ -13,3 +13,4 @@ class ConversationModel(Base):
 
     patient = relationship('PatientModel', back_populates='conversations')
     messages = relationship('MessageModel', back_populates='conversation', cascade='all, delete-orphan') 
+    tasks = relationship('TaskQueueModel', back_populates='conversation', cascade='all, delete-orphan')  # 关联任务队列 

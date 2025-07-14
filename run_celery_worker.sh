@@ -6,7 +6,7 @@
 export IS_CELERY_WORKER=1
 
 # 启动 Celery worker，后台运行（--detach）
-celery -A src.utils.celery_task_agent worker --loglevel=info --detach
+celery -A src.utils.celery_task_agent worker --loglevel=info --concurrency=1 --prefetch-multiplier=1 --detach --logfile=/var/log/celery/stg/celery.log
 
 # 如果你想在前台运行（调试用），请注释掉上面一行，取消下面一行的注释：
 # celery -A src.utils.celery_task_agent worker --loglevel=info 

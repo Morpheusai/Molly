@@ -825,3 +825,19 @@ class PatientFullInfo(BaseModel):
 class PatientFullListResponse(BaseResponse):
     data: list[PatientFullInfo] = []  # 病人完整信息列表
 
+class TaskQueueStatusRequest(BaseModel):
+    """任务队列状态查询请求模型"""
+    patient_id: int = Field(..., description="病人ID")
+
+class TaskQueueStatusItem(BaseModel):
+    """单个任务队列状态信息模型"""
+    task_id: int = Field(..., description="任务ID（自增主键）")
+    celery_task_id: str = Field(..., description="Celery任务ID")
+    status: str = Field(..., description="任务状态（queued/running/completed/failed）")
+    queue_position: int = Field(..., description="任务在队列中的位置（从1开始）")
+    wait_time: int = Field(..., description="预计还需等待时间（单位：秒）")
+
+class TaskQueueStatusResponse(BaseResponse):
+    """任务队列状态查询响应模型"""
+    tasks: list[TaskQueueStatusItem] = Field(default=[], description="该病人下所有任务的状态列表")
+

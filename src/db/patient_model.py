@@ -42,3 +42,4 @@ class PatientModel(Base):
     prediction_details = relationship('PredictionDetailModel', back_populates='patient', cascade='all, delete-orphan')  # 关联预测详情
     conversations = relationship('ConversationModel', back_populates='patient', cascade='all, delete-orphan')  # 关联对话记录
     workflows = relationship('WorkflowModel', back_populates='patient', cascade='all, delete-orphan')  # 关联工作流 
+    tasks = relationship('TaskQueueModel', back_populates='patient', cascade='all, delete-orphan')  # 关联任务队列 

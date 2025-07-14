@@ -7,14 +7,12 @@ from fastapi import HTTPException
 from src.utils.mysql_db import *
 # from src.utils.mysql_db import search_sessions_sql
 from src.utils.session import get_async_db
-from src.utils.session import with_async_session
 from .protocols import *
 from src.utils.jwt_util import decode_vaild
 from src.utils import logger
-from src.api.protocols import  CreateConversationRequest, CreateConversationResponse, PredictionDetailListResponse, PredictionDetailItem, HandleAIMessageRequest, HandleAIMessageResponse, GetProjectDetailRequest, GetProjectDetailResponse, ProjectDetailInfo, GetProjectStageStatsRequest, GetProjectStageStatsResponse, ProjectFullListResponse, ProjectFullInfo, PatientFullListResponse, PatientFullInfo
-from src.utils.mysql_db import create_conversation_sql, get_conversation_id_by_patient_and_type_sql, handle_ai_message_sql
-from src.db import PatientModel, WorkflowModel
-from fastapi import APIRouter
+from src.api.protocols import  CreateConversationRequest, CreateConversationResponse, PredictionDetailListResponse, PredictionDetailItem, HandleAIMessageRequest, HandleAIMessageResponse, GetProjectDetailRequest, GetProjectDetailResponse, ProjectDetailInfo, GetProjectStageStatsRequest, GetProjectStageStatsResponse, ProjectFullListResponse, ProjectFullInfo, PatientFullListResponse, PatientFullInfo, TaskQueueStatusResponse, TaskQueueStatusItem
+from src.utils.mysql_db import create_conversation_sql, get_conversation_id_by_patient_and_type_sql, handle_ai_message_sql, get_task_queue_status_sql
+from src.db import WorkflowModel
 
 
 # from src.demo.insert_guide_demo import insert_guide_demo
@@ -594,3 +592,13 @@ async def get_project_stage_stats(
     except Exception as e:
         logger.error(f"项目阶段统计失败: {e}", exc_info=True)
         return GetProjectStageStatsResponse(ok=1, failed=str(e), data=None)
+
+
+async def get_task_queue_status(
+    request: TaskQueueStatusRequest = Body(...)
+) -> TaskQueueStatusResponse:
+    """
+    获取该病人下所有任务的排队顺序和预计等待时间（POST请求，参数通过Body传递）
+    """
+    tasks = await get_task_queue_status_sql(request.patient_id)
+    return TaskQueueStatusResponse(ok=0, failed="", tasks=[TaskQueueStatusItem(**t) for t in tasks])

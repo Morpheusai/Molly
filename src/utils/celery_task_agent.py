@@ -1,5 +1,3 @@
-import os
-import sys
 import asyncio
 
 from celery import Celery
@@ -12,6 +10,9 @@ from src.utils.log import logger
 from src.utils.base import get_async_session_local
 from src.model.predict_openai_engine import predict_proxy_stream_generator
 from src.api.protocols import PredictUserInputAgentRequest
+
+# 导入信号监听模块，确保信号监听生效
+import src.utils.celery_task_signals
 
 agent_broker_url = g_config["url"]["agent_broker_url"]
 

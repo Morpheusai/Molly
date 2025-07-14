@@ -27,7 +27,8 @@ from src.api.api import (
     handle_tool_input_output,
     handle_ai_message_url,
     get_project_detail,
-    get_project_stage_stats
+    get_project_stage_stats,
+    get_task_queue_status
 )
 from src.api.protocols import (
     UserInput, 
@@ -35,8 +36,6 @@ from src.api.protocols import (
     PredictUserInputRequest, 
     PredictUserInputAgentRequest,
     CustomPredictUserInputRequest, 
-    ProjectFullListResponse, 
-    PatientFullListResponse
 )
 from src.db.conversation_model import ConversationModel
 from src.db.patient_model import PatientModel
@@ -50,7 +49,7 @@ from src.file.extract_patient_info_router import router as extract_router
 from src.file.markdown_download_router import router as markdown_download_file
 from src.utils import logger
 from src.utils.jwt_util import create_system_token, decode_vaild
-from src.utils.mysql_db import search_unionid_sql, insert_message_sql,get_conversation_id_by_patient_and_type_sql
+from src.utils.mysql_db import search_unionid_sql, insert_message_sql,get_conversation_id_by_patient_and_type_sql,insert_task_queue_record
 from src.utils.session import get_async_db, get_async_session_local
 
 agent_broker_url = g_config["url"]["agent_broker_url"]
@@ -390,7 +389,9 @@ async def backend_chat_with_files(
             except Exception as e:
                 logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
         
-        celery_agent.send_task("src.utils.celery_task_agent.run_and_consume_generator", args=[agent_request.dict(), conversation_id, patient_id, unionid])
+        result = celery_agent.send_task("src.utils.celery_task_agent.run_and_consume_generator", args=[agent_request.dict(), conversation_id, patient_id, unionid])
+        celery_task_id = result.id
+        await insert_task_queue_record(celery_task_id, patient_id, conversation_id)
         return {"ok": 0, "failed": ""}
     except HTTPException as e:
         raise e
@@ -536,7 +537,7 @@ async def predict_antigen_with_custom_params(
             except Exception as e:
                 logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
         
-        celery_agent.send_task(
+        result = celery_agent.send_task(
             "src.utils.celery_task_agent.run_and_consume_generator", 
             args=[
                 agent_request.dict(), 
@@ -545,6 +546,9 @@ async def predict_antigen_with_custom_params(
                 unionid
             ]
         )
+        celery_task_id = result.id
+
+        await insert_task_queue_record(celery_task_id, patient_id, conversation_id)
         return {"ok": 0, "failed": ""}
     except HTTPException as e:
         raise e
@@ -595,6 +599,12 @@ app.include_router(display_router, prefix="/backend")
 # app.include_router(weblogo_generate, prefix="/backend")
 # app.include_router(files_migrate, prefix="/backend")
 app.include_router(markdown_download_file, prefix="/backend")
+
+# 注册任务队列状态接口
+app.post(
+    "/backend/task_queue/status",
+    tags=["任务队列"], summary="获取任务队列状态"
+)(get_task_queue_status)
 
 # app.post("/query_user_info", tags=["用户数据"], summary="查询用户信息")(query_user_info)
 
