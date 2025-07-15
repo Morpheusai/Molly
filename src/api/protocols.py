@@ -502,6 +502,7 @@ class MessageInfo(BaseModel):
 
 class ConversationMessagesResponse(BaseResponse):
     """会话消息列表的响应模型"""
+    conversation_id: Optional[int] = Field(default=None)
     messages: List[MessageInfo] = []
 
 class GetWorkflowStatusRequest(BaseModel):
@@ -827,12 +828,12 @@ class PatientFullListResponse(BaseResponse):
 
 class TaskQueueStatusRequest(BaseModel):
     """任务队列状态查询请求模型"""
-    patient_id: int = Field(..., description="病人ID")
+    conversation_id: int = Field(..., description="会话ID")
 
 class TaskQueueStatusItem(BaseModel):
     """单个任务队列状态信息模型"""
     task_id: int = Field(..., description="任务ID（自增主键）")
-    celery_task_id: str = Field(..., description="Celery任务ID")
+    celery_task_id: Optional[str] = Field(default=None, description="Celery任务ID")
     status: str = Field(..., description="任务状态（queued/running/completed/failed）")
     queue_position: int = Field(..., description="任务在队列中的位置（从1开始）")
     wait_time: int = Field(..., description="预计还需等待时间（单位：秒）")

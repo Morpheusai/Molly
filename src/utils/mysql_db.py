@@ -2,7 +2,7 @@ import httpx
 import json
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from collections import OrderedDict
 
@@ -1112,59 +1112,76 @@ async def get_project_stage_stats_sql(session, project_id: int):
         return None
 
 @with_async_session
-async def get_task_queue_status_sql(session, patient_id: int):
+async def get_task_queue_status_sql(session, conversation_id: int):
     """
-    查询该病人下所有任务的排队顺序和预计等待时间（只查一次数据库）
+    查询全局任务队列中最新任务的排队顺序和预计等待时间，只返回最新一条记录。
     """
-    tasks = await session.execute(
-        select(TaskQueueModel).where(TaskQueueModel.patient_id == patient_id).order_by(asc(TaskQueueModel.id))
+    # 1. 查找该conversation_id下id最大（最新）的一条记录
+    latest_task = await session.execute(
+        select(TaskQueueModel).where(TaskQueueModel.conversation_id == conversation_id).order_by(TaskQueueModel.id.desc()).limit(1)
     )
-    tasks = tasks.scalars().all()
-    now = datetime.utcnow()
-    result = []
-    for task in tasks:
-        # 只查一次，获取所有id更小且status为queued/running的任务
+    task = latest_task.scalars().first()
+    if not task:
+        return []
+    now = datetime.now()
+    if task.status == 'running':
+        queue_position = 0
+        elapsed = (now - task.started_at).total_seconds() if task.started_at else 0
+        wait_time = int(task.estimated_time - elapsed)
+        wait_time = max(wait_time, 0)
+    elif task.status == 'queued':
         prev_tasks = await session.execute(
             select(TaskQueueModel).where(
-                TaskQueueModel.patient_id == patient_id,
                 TaskQueueModel.id < task.id,
-                TaskQueueModel.status.in_(["queued", "running"])
-            ).order_by(asc(TaskQueueModel.id))
+                TaskQueueModel.status.in_(['queued', 'running'])
+            ).order_by(TaskQueueModel.id)
         )
         prev_tasks = prev_tasks.scalars().all()
-        queue_position = len(prev_tasks)
         wait_time = 0
         for t in prev_tasks:
             if t.status == 'queued':
                 wait_time += t.estimated_time
             elif t.status == 'running':
-                elapsed = (now - t.started_at).total_seconds() if t.started_at else 0
-                remain = t.estimated_time - elapsed
-                wait_time += remain if remain > 0 else 0
-        result.append({
-            "task_id": task.id,
-            "celery_task_id": task.celery_task_id,
-            "status": task.status,
-            "queue_position": queue_position,
-            "wait_time": int(wait_time)
-        })
+                if t.started_at:
+                    remain = t.estimated_time - (now - t.started_at).total_seconds()
+                    wait_time += max(remain, 0)
+                else:
+                    wait_time += t.estimated_time
+        wait_time += task.estimated_time
+        queue_position = len(prev_tasks)
+    elif task.status == 'completed':
+        queue_position = 0
+        wait_time = 0
+    else:
+        queue_position = 0
+        wait_time = 0
+    result = [{
+        "task_id": task.id,
+        "celery_task_id": task.celery_task_id,
+        "status": task.status,
+        "queue_position": queue_position,
+        "wait_time": int(wait_time)
+    }]
     return result
 
 @with_async_session
-async def insert_task_queue_record(session, celery_task_id: str, patient_id: int, conversation_id: int):
+async def insert_task_queue_record(session, patient_id: int, conversation_id: int, peptide_nums: int):
     """
-    在任务发出后插入task_queue记录，包含celery_task_id、patient_id、conversation_id和初始状态queued。
+    先插入task_queue记录，celery_task_id 为空，返回主键id。
     """
     task = TaskQueueModel(
-        celery_task_id=celery_task_id,
+        celery_task_id=None,
         patient_id=patient_id,
         conversation_id=conversation_id,
-        estimated_time=1000,#0.0427*肽段条数
+        estimated_time=peptide_nums*0.07,
         status='queued'
     )
     session.add(task)
     try:
         await session.commit()
+        await session.refresh(task)
+        return task.id
     except IntegrityError:
         await session.rollback()
-        # 已有记录，忽略即可
+        return None  # 已有记录，忽略即可
+

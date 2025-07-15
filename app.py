@@ -50,11 +50,9 @@ from src.file.markdown_download_router import router as markdown_download_file
 from src.utils import logger
 from src.utils.jwt_util import create_system_token, decode_vaild
 from src.utils.mysql_db import search_unionid_sql, insert_message_sql,get_conversation_id_by_patient_and_type_sql,insert_task_queue_record
+from src.utils.utils import count_peptides
 from src.utils.session import get_async_db, get_async_session_local
-
-agent_broker_url = g_config["url"]["agent_broker_url"]
-
-celery_agent = Celery( "celery_task_agent", broker=agent_broker_url)
+from src.utils.celery_task_agent import celery_agent
 
 logger.info(f"========================start neo backend==============================")
 
@@ -361,7 +359,8 @@ async def backend_chat_with_files(
             cdr3=cdr3,
             parameters=user_input.parameters
         )
-
+        #获取文件肽段数
+        peptide_nums = count_peptides(user_input.file_path)
         # 定义完成回调
         async def on_complete():
             try:
@@ -389,9 +388,21 @@ async def backend_chat_with_files(
             except Exception as e:
                 logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
         
-        result = celery_agent.send_task("src.utils.celery_task_agent.run_and_consume_generator", args=[agent_request.dict(), conversation_id, patient_id, unionid])
-        celery_task_id = result.id
-        await insert_task_queue_record(celery_task_id, patient_id, conversation_id)
+        # 先插入 task_queue，celery_task_id 为空，获取主键id
+        task_queue_id = await insert_task_queue_record(patient_id, conversation_id, peptide_nums)
+        # 发送 celery 任务，task_queue_id 作为 kwargs 传递
+        result = celery_agent.send_task(
+            "src.utils.celery_task_agent.run_and_consume_generator", 
+            args=[
+                agent_request.dict(), 
+                conversation_id, 
+                patient_id, 
+                unionid
+            ],
+            kwargs={
+                'task_queue_id': task_queue_id
+            }
+        )
         return {"ok": 0, "failed": ""}
     except HTTPException as e:
         raise e
@@ -509,6 +520,8 @@ async def predict_antigen_with_custom_params(
             cdr3=cdr3,
             parameters=user_input.parameters
         )
+        #获取文件肽段数
+        peptide_nums = count_peptides(user_input.parameters['netctlpan']['input_filename'])
 
         # 定义完成回调
         async def on_complete():
@@ -537,6 +550,9 @@ async def predict_antigen_with_custom_params(
             except Exception as e:
                 logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
         
+        # 先插入 task_queue，celery_task_id 为空，获取主键id
+        task_queue_id = await insert_task_queue_record(patient_id, conversation_id, peptide_nums)
+        # 发送 celery 任务，task_queue_id 作为 kwargs 传递
         result = celery_agent.send_task(
             "src.utils.celery_task_agent.run_and_consume_generator", 
             args=[
@@ -544,11 +560,12 @@ async def predict_antigen_with_custom_params(
                 conversation_id, 
                 patient_id, 
                 unionid
-            ]
+            ],
+            kwargs={
+                'task_queue_id': task_queue_id
+            }
         )
-        celery_task_id = result.id
-
-        await insert_task_queue_record(celery_task_id, patient_id, conversation_id)
+        # 不再需要插入 task_queue，celery_task_id 由worker端补充
         return {"ok": 0, "failed": ""}
     except HTTPException as e:
         raise e
@@ -602,7 +619,7 @@ app.include_router(markdown_download_file, prefix="/backend")
 
 # 注册任务队列状态接口
 app.post(
-    "/backend/task_queue/status",
+    "/backend/task_queue_status",
     tags=["任务队列"], summary="获取任务队列状态"
 )(get_task_queue_status)
 

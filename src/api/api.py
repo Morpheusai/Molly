@@ -427,18 +427,18 @@ async def get_conversation_messages(
         # 2. 查找conversation_id
         conversation_id = await get_conversation_id_by_patient_and_type_sql(request.patient_id, request.conversation_type)
         if not conversation_id:
-            return ConversationMessagesResponse(ok=0, failed="未找到对应会话", messages=[])
+            return ConversationMessagesResponse(ok=0, failed="未找到对应会话", conversation_id=None, messages=[])
         # 3. 从数据库获取消息数据
         messages_data = await get_messages_by_conversation_id_sql(conversation_id)
         # 4. 将原始数据转换为Pydantic模型列表
         messages = [MessageInfo(**msg) for msg in messages_data]
         # 5. 返回成功响应
-        return ConversationMessagesResponse(ok=0, failed="", messages=messages)
+        return ConversationMessagesResponse(ok=0, failed="", conversation_id=conversation_id, messages=messages)
     except HTTPException as e:
         raise e    
     except Exception as e:
         logger.error(f"获取会话消息失败: {e}", exc_info=True)
-        return ConversationMessagesResponse(ok=1, failed=str(e), messages=[])
+        return ConversationMessagesResponse(ok=1, failed=str(e), conversation_id=None, messages=[])
 
 async def get_workflow_status(
     request: GetWorkflowStatusRequest = Body(...),
@@ -600,5 +600,5 @@ async def get_task_queue_status(
     """
     获取该病人下所有任务的排队顺序和预计等待时间（POST请求，参数通过Body传递）
     """
-    tasks = await get_task_queue_status_sql(request.patient_id)
+    tasks = await get_task_queue_status_sql(request.conversation_id)
     return TaskQueueStatusResponse(ok=0, failed="", tasks=[TaskQueueStatusItem(**t) for t in tasks])

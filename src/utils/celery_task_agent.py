@@ -16,10 +16,10 @@ import src.utils.celery_task_signals
 
 agent_broker_url = g_config["url"]["agent_broker_url"]
 
-celery_agent_app = Celery("worker", broker=agent_broker_url, backend=None)
+celery_agent = Celery("celery_task_agent", broker=agent_broker_url, backend=None)
 
-@celery_agent_app.task(soft_time_limit=600, ignore_result=True)
-def run_and_consume_generator(agent_request_dict, conversation_id, patient_id, unionid):
+@celery_agent.task(soft_time_limit=600, ignore_result=True)
+def run_and_consume_generator(agent_request_dict, conversation_id, patient_id, unionid, task_queue_id=None):
     """
     Celery任务入口，必须是同步def。参数agent_request_dict为dict，conversation_id为str。
     增加异常捕获，防止worker崩溃。
