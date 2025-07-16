@@ -1126,9 +1126,9 @@ async def get_task_queue_status_sql(session, conversation_id: int):
     now = datetime.now()
     if task.status == 'running':
         queue_position = 0
-        elapsed = (now - task.started_at).total_seconds() if task.started_at else 0
-        wait_time = int(task.estimated_time - elapsed)
-        wait_time = max(wait_time, 0)
+        elapsed = (now - task.started_at).total_seconds() if task.started_at else 0.0
+        wait_time = task.estimated_time - elapsed
+        wait_time = max(wait_time, 0.0)
     elif task.status == 'queued':
         prev_tasks = await session.execute(
             select(TaskQueueModel).where(
@@ -1137,30 +1137,30 @@ async def get_task_queue_status_sql(session, conversation_id: int):
             ).order_by(TaskQueueModel.id)
         )
         prev_tasks = prev_tasks.scalars().all()
-        wait_time = 0
+        wait_time = 0.0
         for t in prev_tasks:
             if t.status == 'queued':
                 wait_time += t.estimated_time
             elif t.status == 'running':
                 if t.started_at:
                     remain = t.estimated_time - (now - t.started_at).total_seconds()
-                    wait_time += max(remain, 0)
+                    wait_time += max(remain, 0.0)
                 else:
                     wait_time += t.estimated_time
         wait_time += task.estimated_time
         queue_position = len(prev_tasks)
     elif task.status == 'completed':
         queue_position = 0
-        wait_time = 0
+        wait_time = 0.0
     else:
         queue_position = 0
-        wait_time = 0
+        wait_time = 0.0
     result = [{
         "task_id": task.id,
         "celery_task_id": task.celery_task_id,
         "status": task.status,
         "queue_position": queue_position,
-        "wait_time": int(wait_time)
+        "wait_time": int(round(wait_time))
     }]
     return result
 

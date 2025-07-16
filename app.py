@@ -515,13 +515,14 @@ async def predict_antigen_with_custom_params(
             conversation_id=conversation_id,
             patient_id=patient_id,
             predict_id=prediction_id,
-            file_path=user_input.parameters['netctlpan']['input_filename'],
+            file_path=user_input.parameters['netchop']['input_filename'],
             mhc_allele=mhc_allele,
             cdr3=cdr3,
             parameters=user_input.parameters
         )
         #获取文件肽段数
-        peptide_nums = count_peptides(user_input.parameters['netctlpan']['input_filename'])
+        # peptide_nums = count_peptides(user_input.parameters['netctlpan']['input_filename'])
+        peptide_nums = count_peptides(user_input.parameters['netchop']['input_filename'])
 
         # 定义完成回调
         async def on_complete():

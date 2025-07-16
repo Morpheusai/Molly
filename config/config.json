@@ -21,5 +21,9 @@
     },
     "download":{
         "output_download_url_prefix": "https://mollyseek.com/downloads/"
+    },
+
+    "time":{
+        "agent_http_timeout": 21600
     }
 }
