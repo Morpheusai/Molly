@@ -329,6 +329,7 @@ async def create_project_sql(session, request: CreateProjectRequest, unionid: st
             project.phone = request.phone
             project.patient_enrollment_count = request.patient_enrollment_count
             project.status = request.status
+            project.enrollment_criteria = request.enrollment_criteria
             project.updated_at = datetime.now()
             
             await session.commit()
@@ -357,7 +358,8 @@ async def create_project_sql(session, request: CreateProjectRequest, unionid: st
                 hospital=request.hospital,
                 phone=request.phone,
                 patient_enrollment_count=request.patient_enrollment_count,
-                status=request.status
+                status=request.status,
+                enrollment_criteria=request.enrollment_criteria
             )
             session.add(project)
             await session.commit()
@@ -409,7 +411,8 @@ async def get_projects_by_unionid_sql(session, unionid: str):
                 "status": project.status,
                 "created_at": project.created_at.strftime('%Y-%m-%d %H:%M:%S') if project.created_at else None,
                 "updated_at": project.updated_at.strftime('%Y-%m-%d %H:%M:%S') if project.updated_at else None,
-                "created_by": project.created_by
+                "created_by": project.created_by,
+                "enrollment_criteria": project.enrollment_criteria
             })
         return result
     except Exception as e:
@@ -1049,7 +1052,8 @@ async def get_project_detail_by_id_sql(session, project_id: int):
             'patient_enrollment_count': project.patient_enrollment_count,
             'hospital': project.hospital,
             'phone': project.phone,
-            'status': project.status
+            'status': project.status,
+            'enrollment_criteria': project.enrollment_criteria
         }
     except Exception as e:
         logger.error(f"查询项目详情失败: {e}", exc_info=True)
@@ -1165,16 +1169,19 @@ async def get_task_queue_status_sql(session, conversation_id: int):
     return result
 
 @with_async_session
-async def insert_task_queue_record(session, patient_id: int, conversation_id: int, peptide_nums: int):
+async def insert_task_queue_record(session, patient_id: int, conversation_id: int, unique_peptide_count: int = None, sliding_window_length: str = None):
     """
     先插入task_queue记录，celery_task_id 为空，返回主键id。
+    新增 unique_peptide_count（滑窗去重后肽段数）和 sliding_window_length（滑窗长度）字段。
     """
     task = TaskQueueModel(
         celery_task_id=None,
         patient_id=patient_id,
         conversation_id=conversation_id,
-        estimated_time=peptide_nums*0.07,
-        status='queued'
+        estimated_time=unique_peptide_count*0.07,
+        status='queued',
+        unique_peptide_count=unique_peptide_count,
+        sliding_window_length=sliding_window_length
     )
     session.add(task)
     try:
@@ -1184,4 +1191,42 @@ async def insert_task_queue_record(session, patient_id: int, conversation_id: in
     except IntegrityError:
         await session.rollback()
         return None  # 已有记录，忽略即可
+
+@with_async_session
+async def delete_patient_file_sql(session, patient_id: int, file_path: str):
+    """
+    伪删除指定病人id和文件路径的文件（将is_deleted设为1）
+    """
+    try:
+        # 查找文件
+        file = await session.execute(
+            select(FileModel)
+            .where(FileModel.patient_id == patient_id)
+            .where(FileModel.file_path == file_path)
+            .where(FileModel.is_deleted == 0)
+        )
+        file_obj = file.scalar_one_or_none()
+        if not file_obj:
+            return False, "未找到对应文件或文件已删除"
+        file_obj.is_deleted = 1
+        await session.commit()
+        return True, "删除成功"
+    except Exception as e:
+        await session.rollback()
+        return False, str(e)
+
+@with_async_session
+async def has_predict_neo_antigen_conversation_sql(session, patient_id: int):
+    """
+    判断该病人是否有类型为predict_neo_antigen的会话
+    """
+    result = await session.execute(
+        select(ConversationModel.id)
+        .where(
+            ConversationModel.patient_id == patient_id,
+            ConversationModel.type == "predict_neo_antigen",
+            ConversationModel.is_deleted == 0
+        )
+    )
+    return result.first() is not None
 

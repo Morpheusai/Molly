@@ -61,7 +61,7 @@ async def predict_proxy_stream_generator(
     content_dict = {}
     content = ""
     chunk_queue = deque()
-    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=g_config["url"].get("http_timeout", 1800))) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=g_config["time"].get("agent_http_timeout", 21600))) as client:
         try:
             async with client.stream(
                 "POST",

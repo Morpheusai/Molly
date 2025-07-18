@@ -77,10 +77,9 @@ async def upload_attachments(
                                algorithms=[ALGORITHM])
         unionid: str = payload.get("sub")
         if unionid is None:
-            return {
-                "ok": 1,
-                "failed": "unionid不存在"
-            }  
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+    except HTTPException as e:
+        raise e 
     except Exception as e:
         logger.error(f"Token验证失败: {str(e)}")
         return {

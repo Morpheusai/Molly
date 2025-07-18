@@ -50,9 +50,11 @@ from src.file.markdown_download_router import router as markdown_download_file
 from src.utils import logger
 from src.utils.jwt_util import create_system_token, decode_vaild
 from src.utils.mysql_db import search_unionid_sql, insert_message_sql,get_conversation_id_by_patient_and_type_sql,insert_task_queue_record
-from src.utils.utils import count_peptides
+from src.utils.minio import download_from_minio_uri
+from src.utils.utils import count_peptides,sliding_window_from_file,deduplicate_fasta_by_sequence
 from src.utils.session import get_async_db, get_async_session_local
 from src.utils.celery_task_agent import celery_agent
+from src.file.delete_router import router as delete_file_router
 
 logger.info(f"========================start neo backend==============================")
 
@@ -359,8 +361,18 @@ async def backend_chat_with_files(
             cdr3=cdr3,
             parameters=user_input.parameters
         )
-        #获取文件肽段数
-        peptide_nums = count_peptides(user_input.file_path)
+        #获取滑窗降重后的肽段数
+        input_fasta = download_from_minio_uri(user_input.file_path)        
+        sliding_window_from_file(input_fasta, [8,9,10,11], input_fasta)
+
+        # 读取、去重、写回
+        with open(input_fasta, 'r', encoding='utf-8') as f:
+            fasta_content = f.read()
+        deduped, total_before, total_after = deduplicate_fasta_by_sequence(fasta_content)
+        print(f"滑窗得到去重前肽段总数: {total_before}")
+        print(f"滑窗得到去重后肽段总数: {total_after}")
+        # with open(input_fasta, 'w', encoding='utf-8') as f:
+        #     f.write(deduped)
         # 定义完成回调
         async def on_complete():
             try:
@@ -389,7 +401,7 @@ async def backend_chat_with_files(
                 logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
         
         # 先插入 task_queue，celery_task_id 为空，获取主键id
-        task_queue_id = await insert_task_queue_record(patient_id, conversation_id, peptide_nums)
+        task_queue_id = await insert_task_queue_record(patient_id, conversation_id, total_after,",".join(map(str, [8,9,10,11])))
         # 发送 celery 任务，task_queue_id 作为 kwargs 传递
         result = celery_agent.send_task(
             "src.utils.celery_task_agent.run_and_consume_generator", 
@@ -510,6 +522,9 @@ async def predict_antigen_with_custom_params(
             await db.commit()
         
         # === 关键：predict_id 一定用新建的 prediction_id ===
+        if user_input.parameters['netchop']['peptide_length'] == []:
+            user_input.parameters['netchop']['peptide_length'] = [-1]
+            
         agent_request = PredictUserInputAgentRequest(
             prompt="完成自定义参数收集，开始预测",
             conversation_id=conversation_id,
@@ -520,9 +535,20 @@ async def predict_antigen_with_custom_params(
             cdr3=cdr3,
             parameters=user_input.parameters
         )
+        #获取滑窗降重后的肽段数
+        input_fasta = download_from_minio_uri(user_input.parameters['netchop']['input_filename'])   
+        window_sizes = [8, 9, 10, 11] if user_input.parameters['netchop']['peptide_length'] in ([-1]) else user_input.parameters['netchop']['peptide_length']
+        sliding_window_from_file(input_fasta, window_sizes, input_fasta)
+
+        # 读取、去重、写回
+        with open(input_fasta, 'r', encoding='utf-8') as f:
+            fasta_content = f.read()
+        deduped, total_before, total_after = deduplicate_fasta_by_sequence(fasta_content)
+        print(f"滑窗得到去重前肽段总数: {total_before}")
+        print(f"滑窗得到去重后肽段总数: {total_after}")
+        # with open(input_fasta, 'w', encoding='utf-8') as f:
+        #     f.write(deduped)        
         #获取文件肽段数
-        # peptide_nums = count_peptides(user_input.parameters['netctlpan']['input_filename'])
-        peptide_nums = count_peptides(user_input.parameters['netchop']['input_filename'])
 
         # 定义完成回调
         async def on_complete():
@@ -552,7 +578,7 @@ async def predict_antigen_with_custom_params(
                 logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
         
         # 先插入 task_queue，celery_task_id 为空，获取主键id
-        task_queue_id = await insert_task_queue_record(patient_id, conversation_id, peptide_nums)
+        task_queue_id = await insert_task_queue_record(patient_id, conversation_id, total_after,",".join(map(str, window_sizes)))
         # 发送 celery 任务，task_queue_id 作为 kwargs 传递
         result = celery_agent.send_task(
             "src.utils.celery_task_agent.run_and_consume_generator", 
@@ -617,6 +643,7 @@ app.include_router(display_router, prefix="/backend")
 # app.include_router(weblogo_generate, prefix="/backend")
 # app.include_router(files_migrate, prefix="/backend")
 app.include_router(markdown_download_file, prefix="/backend")
+app.include_router(delete_file_router, prefix="/backend")
 
 # 注册任务队列状态接口
 app.post(

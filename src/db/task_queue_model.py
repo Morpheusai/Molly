@@ -16,6 +16,8 @@ class TaskQueueModel(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(), onupdate=lambda: datetime.now(), comment='更新时间')
     started_at = Column(DateTime, nullable=True, comment='开始执行时间')
     completed_at = Column(DateTime, nullable=True, comment='完成时间')
+    unique_peptide_count = Column(Integer, nullable=True, comment='滑窗去重后肽段数')
+    sliding_window_length = Column(String(32), nullable=True, comment='滑窗长度')
 
     patient = relationship('PatientModel', back_populates='tasks')
     conversation = relationship('ConversationModel', back_populates='tasks') 

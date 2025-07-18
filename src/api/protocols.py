@@ -421,7 +421,7 @@ class PatientDetailRequest(BaseModel):
 # 创建项目请求模型
 class CreateProjectRequest(BaseModel):
     project_id: Optional[int] = Field(default=None, description="项目ID，如果不传则创建新项目，如果传入则更新现有项目")
-    name: str = Field(..., description="项目名称")
+    name: Optional[str] = Field(default=None, description="项目名称")
     project_code: Optional[str] = Field(default=None, description="项目编号")
     short_name: Optional[str] = Field(default=None, description="项目简称")
     description: Optional[str] = Field(default=None, description="项目简介")
@@ -435,8 +435,9 @@ class CreateProjectRequest(BaseModel):
     pi_email: Optional[str] = Field(default=None, description="项目负责人邮箱")
     hospital: Optional[str] = Field(default=None, description="所属医院")
     phone: Optional[str] = Field(default=None, description="手机号")
-    patient_enrollment_count: int = Field(..., description="患者入组人数")
+    patient_enrollment_count: Optional[int] = Field(default=None, description="患者入组人数")
     status: Optional[int] = Field(default=0, description="项目状态：0-保存草稿，1-创建立项")
+    enrollment_criteria: Optional[str] = Field(default=None, description="入组要求")
 
 # 创建项目响应模型
 class CreateProjectResponse(BaseResponse):
@@ -739,10 +740,11 @@ class ProjectDetailInfo(BaseModel):
     principal_investigator: str | None = Field(None, description="项目负责人")
     pi_email: str | None = Field(None, description="项目负责人邮箱")
     doctor_enrollment_count: int = Field(description="医生入组人数")
-    patient_enrollment_count: int = Field(description="患者入组人数")
+    patient_enrollment_count: int | None = Field(None, description="患者入组人数")
     hospital: str | None = Field(None, description="所属医院")
     phone: str | None = Field(None, description="手机号")
     status: int = Field(description="项目状态：0-保存草稿，1-创建立项")
+    enrollment_criteria: str | None = Field(None, description="入组要求")
 
 class GetProjectDetailResponse(BaseResponse):
     """
@@ -792,6 +794,7 @@ class ProjectFullInfo(BaseModel):
     created_at: str | None = None  # 创建时间
     updated_at: str | None = None  # 更新时间
     created_by: str | None = None  # 创建者unionid
+    enrollment_criteria: str | None = None  # 入组要求
 
 # 项目完整信息列表响应模型，projects为ProjectFullInfo列表
 class ProjectFullListResponse(BaseResponse):
@@ -841,4 +844,23 @@ class TaskQueueStatusItem(BaseModel):
 class TaskQueueStatusResponse(BaseResponse):
     """任务队列状态查询响应模型"""
     tasks: list[TaskQueueStatusItem] = Field(default=[], description="该病人下所有任务的状态列表")
+
+
+class DeleteFileRequest(BaseModel):
+    """
+    删除测序文件的请求模型。
+    输入参数：
+    - patient_id: 病人ID，指定要删除文件所属的病人。
+    - file_path: 要删除的文件路径（唯一定位文件）。
+    """
+    patient_id: int = Field(..., description="病人ID")
+    file_path: str = Field(..., description="要删除的文件路径")
+
+class DeleteFileResponse(BaseResponse):
+    """
+    删除测序文件的响应模型。
+    继承BaseResponse，ok=0表示成功，ok=1表示失败，failed为错误信息。
+    新增字段：can_delete，0表示可以删除，1表示不能删除
+    """
+    can_delete: int = 0
 
