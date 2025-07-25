@@ -1,3 +1,5 @@
+import httpx
+
 from fastapi import Depends, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,14 +7,37 @@ from sqlalchemy import func
 from fastapi import HTTPException
 
 from src.utils.mysql_db import *
-# from src.utils.mysql_db import search_sessions_sql
 from src.utils.session import get_async_db
 from .protocols import *
 from src.utils.jwt_util import decode_vaild
 from src.utils import logger
-from src.api.protocols import  CreateConversationRequest, CreateConversationResponse, PredictionDetailListResponse, PredictionDetailItem, HandleAIMessageRequest, HandleAIMessageResponse, GetProjectDetailRequest, GetProjectDetailResponse, ProjectDetailInfo, GetProjectStageStatsRequest, GetProjectStageStatsResponse, ProjectFullListResponse, ProjectFullInfo, PatientFullListResponse, PatientFullInfo, TaskQueueStatusResponse, TaskQueueStatusItem
-from src.utils.mysql_db import create_conversation_sql, get_conversation_id_by_patient_and_type_sql, handle_ai_message_sql, get_task_queue_status_sql
+from src.api.protocols import (
+    CreateConversationRequest,
+    CreateConversationResponse,
+    PredictionDetailListResponse,
+    PredictionDetailItem,
+    HandleAIMessageRequest,
+    HandleAIMessageResponse,
+    GetProjectDetailRequest,
+    GetProjectDetailResponse,
+    ProjectDetailInfo,
+    GetProjectStageStatsRequest,
+    GetProjectStageStatsResponse,
+    ProjectFullListResponse,
+    ProjectFullInfo,
+    PatientFullListResponse,
+    PatientFullInfo,
+    TaskQueueStatusResponse,
+    TaskQueueStatusItem,
+    DeleteSessionRequest,
+    QuerySingleSessionRequest,
+    VcfParseRequest, VcfParseResponse
+)
+from src.config import g_config 
 from src.db import WorkflowModel
+from src.api.protocols import UploadTumorNormalFilesResponse
+from src.utils.utils import read_excel_from_minio_to_dictlist, read_excel_from_minio_to_dictlist_fasta
+
 
 
 # from src.demo.insert_guide_demo import insert_guide_demo
@@ -25,98 +50,6 @@ async def add_user(
 ):
     return await add_user_sql(request)
 
-# #查询用户信息
-# async def query_user_info(
-#         request: QueryUserInfoRequest = Body(...),
-#         session: AsyncSession = Depends(get_async_db)
-# ):
-#     return await query_user_info_sql(session,request)
-
-# #删除单一会话
-# async def delete_specific_session(
-#         request: DeleteSessionRequest = Body(...),
-#         credentials: HTTPAuthorizationCredentials = Depends(security),
-#         session: AsyncSession = Depends(get_async_db)
-# ):
-#     return await delete_specific_session_sql(session,credentials,request)
-
-# #清空所有会话
-# async def delete_sessions(
-#         credentials: HTTPAuthorizationCredentials = Depends(security),
-#         session: AsyncSession = Depends(get_async_db)
-# ):
-#    return await delete_sessions_sql(session,credentials)
-
-# #查询单一会话
-# async def search_specific_session(
-#         request: QuerySingleSessionRequest = Body(...),
-#         credentials: HTTPAuthorizationCredentials = Depends(security),
-#         session: AsyncSession = Depends(get_async_db)
-# ):
-#     return await search_specific_session_sql(session,credentials,request)
-
-# #查询会话历史
-# async def search_sessions(
-#         # request: SessionsRequest = Body(...),
-#         credentials: HTTPAuthorizationCredentials = Depends(security),
-#         session: AsyncSession = Depends(get_async_db)
-# ):
-#     return await search_sessions_sql(session,credentials)
-
-
-# #新建会话记录
-# async def add_sessions(
-#         session: AsyncSession = Depends(get_async_db),
-#         credentials: HTTPAuthorizationCredentials = Depends(security),
-#         request: AddSessionRequest = Body(...)        
-# ):
-#     return await add_sessions_sql(session,credentials,request)
-
-# #返回会话id
-# async def get_new_session_id(
-#         credentials: HTTPAuthorizationCredentials = Depends(security),
-# ):
-#     return await get_new_session_id_sql(credentials)
-
-
-
-# # 使用 UPSERT 操作更新或插入 conversation 记录
-# async def upsert_conversation(
-#         conversation_id: str,      
-#         unionid: str,
-#         prompt:str
-# ):
-#     return await upsert_conversation_sql(conversation_id, unionid,prompt)
-
-# #更改会话名称
-# async def update_session_name(
-#         session: AsyncSession = Depends(get_async_db),
-#         credentials: HTTPAuthorizationCredentials = Depends(security),
-#         request: UpdateSessionRequest = Body(...)        
-# ):
-#     return await update_session_name_sql(session,credentials,request)
-
-# #插入demo示例
-# async def insert_demo_conversation(
-#         user_id: str
-# ):
-#     return await insert_guide_demo(user_id)
-
-
-# # 使用 update 操作更新uploadfiles的file_type字段值
-# async def update_uploadfiles_file_type(
-#         file_paths: list[str],      
-#         conversation_id: str,
-# ):
-#         return await update_uploadfiles_file_type_sql(file_paths,conversation_id)
-
-# # 
-# async def reset_conversation(
-#         session: AsyncSession = Depends(get_async_db),
-#         credentials: HTTPAuthorizationCredentials = Depends(security),
-#         request: ResetConversationRequest = Body(...)
-# ):
-#         return await reset_conversation_sql(session,credentials,request)
 
 # 创建病历
 async def create_medical_records(
@@ -364,7 +297,13 @@ async def get_patient_files(
         # 调用数据库函数，传入file_type
         data = await get_patient_files_sql(request.patient_id, request.file_type)
         
-        files = [FileInfo(**f) for f in data["files"]]
+        files = [FileInfo(
+            file_name=f["file_name"],
+            file_path=f["file_path"],
+            file_type=f["file_type"],
+            file_desc=f["file_desc"],
+            file_source=f["file_source"]
+        ) for f in data["files"]]
         return PatientFilesResponse(ok=0, failed="", files=files, total=data["total"])
     except HTTPException as e:
         raise e    
@@ -383,14 +322,34 @@ async def create_conversation(
         unionid: str = payload.get("sub")
         if not unionid:
             raise HTTPException(status_code=401, detail="无效的用户认证")
+
+        # 如果病人id为空，通过unionid创建会话表，conversation_type赋值为qa_predict_neo
+        if not request.patient_id:
+            conversation_id = await get_conversation_id_by_unionid_and_type_sql(unionid, "qa_predict_neo")
+            if conversation_id:
+                return CreateConversationResponse(ok=0, failed="", conversation_id=conversation_id)
+
+            # 创建会话
+            result = await create_conversation_sql(
+                patient_id=None,  # 
+                unionid=unionid,
+                conversation_type=request.conversation_type,
+                title=request.title
+            )
+            if result["ok"] != 0:
+                return CreateConversationResponse(ok=1, failed=result["failed"], conversation_id=None)
+            return CreateConversationResponse(ok=0, failed="", conversation_id=result["conversation_id"])
+
         # 新增逻辑：如果已存在predict_neo_antigen类型的会话，直接返回
         if request.conversation_type == "predict_neo_antigen":
             conversation_id = await get_conversation_id_by_patient_and_type_sql(int(request.patient_id), "predict_neo_antigen")
             if conversation_id:
                 return CreateConversationResponse(ok=0, failed="", conversation_id=conversation_id)
+
         # 创建会话
         result = await create_conversation_sql(
             patient_id=int(request.patient_id),
+            unionid=unionid,
             conversation_type=request.conversation_type,
             title=request.title
         )
@@ -602,3 +561,296 @@ async def get_task_queue_status(
     """
     tasks = await get_task_queue_status_sql(request.conversation_id)
     return TaskQueueStatusResponse(ok=0, failed="", tasks=[TaskQueueStatusItem(**t) for t in tasks])
+
+
+#删除单一会话
+async def delete_specific_session(
+        request: DeleteSessionRequest = Body(...),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        session: AsyncSession = Depends(get_async_db)
+):
+    try:
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+
+        return await delete_specific_session_sql(session,request,unionid)
+    except HTTPException as e:
+        raise e    
+    except Exception as e:
+        logger.error(f"删除单一会话: {e}", exc_info=True)
+        return BaseResponse(ok=1, failed=str(e))
+    
+#清空所有会话
+async def delete_sessions(
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        session: AsyncSession = Depends(get_async_db)
+):
+    try:
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+
+        return await delete_sessions_sql(session,unionid)
+    except HTTPException as e:
+        raise e    
+    except Exception as e:
+        logger.error(f"删除所有会话: {e}", exc_info=True)
+        return BaseResponse(ok=1, failed=str(e))
+    
+
+#查询单一会话
+async def search_specific_session(
+        request: QuerySingleSessionRequest = Body(...),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        session: AsyncSession = Depends(get_async_db)
+):
+    try:
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+
+        return await search_specific_session_sql(session,request)
+    except HTTPException as e:
+        raise e    
+    except Exception as e:
+        logger.error(f"查询单一会话: {e}", exc_info=True)
+        return BaseResponse(ok=1, failed=str(e))
+    
+
+#查询会话历史
+async def search_sessions(
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        session: AsyncSession = Depends(get_async_db)
+):
+    try:
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+
+        return await search_sessions_sql(session,unionid)
+    except HTTPException as e:
+        raise e    
+    except Exception as e:
+        logger.error(f"查询单一会话: {e}", exc_info=True)
+        return BaseResponse(ok=1, failed=str(e))
+    
+#新建会话记录
+async def add_sessions(
+        session: AsyncSession = Depends(get_async_db),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        request: AddSessionRequest = Body(...)        
+):
+    try:
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+
+        return await add_sessions_sql(session,request,unionid) 
+    except HTTPException as e:
+        raise e    
+    except Exception as e:
+        logger.error(f"新建会话失败: {e}", exc_info=True)
+        return BaseResponse(ok=1, failed=str(e))
+    
+#返回会话id
+async def get_new_session_id(
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    try:
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+
+        return await get_new_session_id_sql(unionid)
+
+    except HTTPException as e:
+        raise e    
+    except Exception as e:
+        logger.error(f"新建会话失败: {e}", exc_info=True)
+        return BaseResponse(ok=1, failed=str(e))
+    
+#更改会话名称
+async def update_session_name(
+        session: AsyncSession = Depends(get_async_db),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        request: UpdateSessionRequest = Body(...)        
+):
+    try:
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+
+        return await update_session_name_sql(session,request,unionid)
+    except HTTPException as e:
+        raise e    
+    except Exception as e:
+        logger.error(f"更改会话失败: {e}", exc_info=True)
+        return BaseResponse(ok=1, failed=str(e))
+    
+
+async def reset_conversation(
+        session: AsyncSession = Depends(get_async_db),
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        request: ResetConversationRequest = Body(...)
+):
+    try:
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+
+        return await reset_conversation_sql(session,request,unionid)    
+    except HTTPException as e:
+        raise e    
+    except Exception as e:
+        logger.error(f"新建会话失败: {e}", exc_info=True)
+        return BaseResponse(ok=1, failed=str(e))
+
+async def upload_tumor_normal_files_api(
+    patient_id: int,
+    unionid: str,
+    tumor_file_name: str,
+    tumor_file_type: str,
+    tumor_file_size: int,
+    tumor_file_path: str,
+    tumor_file_hash: str,
+    tumor_file_desc: str,
+    normal_file_path: str
+) -> UploadTumorNormalFilesResponse:
+    inserted_file = await insert_patient_file_sql(
+        patient_id=patient_id,
+        unionid=unionid,
+        file_name=tumor_file_name,
+        file_type=tumor_file_type,
+        file_size=tumor_file_size,
+        file_path=tumor_file_path,
+        file_hash=tumor_file_hash,
+        file_desc=tumor_file_desc
+    )
+    return UploadTumorNormalFilesResponse(
+        ok=0,
+        failed="",
+        tumor_file_name=inserted_file.file_name,
+        tumor_created_at=str(inserted_file.created_at),
+        tumor_file_size=inserted_file.file_size,
+        tumor_file_desc=inserted_file.file_desc,
+        normal_file_path=normal_file_path,
+        tumor_file_path=tumor_file_path
+    )
+
+async def vcf_file_parse(
+    request: VcfParseRequest = Body(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    session: AsyncSession = Depends(get_async_db)
+) -> VcfParseResponse:
+    """
+    VCF文件解析接口：
+    1. 调用外部vcfswitch服务，获取excel的minio路径
+    2. 用read_excel_from_minio_to_dictlist_fasta处理excel，得到list和fasta minio路径
+    3. 两个文件都入库
+    4. 返回excel的list和fasta的minio路径
+    """
+    try:
+        # 1. 获取unionid
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+
+        target_url = g_config["url"]["target_vcfswitch_url"]
+        # 2. 调用外部vcfswitch
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                target_url,
+                json={
+                    "normal_file": request.normal_file,
+                    "tumor_file": request.tumor_file
+                }
+            )
+            if resp.status_code != 200:
+                return VcfParseResponse(ok=1, failed=f"vcfswitch服务异常: {resp.text}")
+            data = resp.json()
+            excel_minio_path = data.get("url")
+            if not excel_minio_path:
+                return VcfParseResponse(ok=1, failed="vcfswitch未返回excel路径")
+
+        # 3. 处理excel，得到list和fasta minio路径
+        bucket_name = excel_minio_path.split("/")[2]  # minio://bucket/xxx
+        result = await read_excel_from_minio_to_dictlist_fasta(excel_minio_path, bucket_name)
+        excel_data = result["excel_data"]
+        source_file_info = result["source_file_info"]
+        fasta_file_info = result["fasta_file_info"]
+
+        # 4. 两个文件都入库
+        await insert_patient_file_sql(
+            patient_id=request.patient_id,
+            unionid=unionid,
+            file_name=source_file_info["file_name"],
+            file_type=source_file_info["file_type"],
+            file_size=source_file_info["file_size"],
+            file_path=source_file_info["file_path"],
+            file_hash=source_file_info["file_hash"],
+            file_desc=source_file_info["file_desc"],
+            file_source=source_file_info["file_source"]
+        )
+        await insert_patient_file_sql(
+            patient_id=request.patient_id,
+            unionid=unionid,
+            file_name=fasta_file_info["file_name"],
+            file_type=fasta_file_info["file_type"],
+            file_size=fasta_file_info["file_size"],
+            file_path=fasta_file_info["file_path"],
+            file_hash=fasta_file_info["file_hash"],
+            file_desc=fasta_file_info["file_desc"],
+            file_source=fasta_file_info["file_source"]
+        )
+
+        # 5. 返回
+        return VcfParseResponse(
+            ok=0,
+            failed="",
+            excel_data=excel_data,
+            fasta_file_minio_path=fasta_file_info["file_path"]
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return VcfParseResponse(ok=1, failed=str(e), excel_data=[], fasta_file_minio_path="")
+
+# 新增：根据minio路径读取excel并返回字典列表
+async def excel_to_dictlist_api(
+    request: ExcelToDictListRequest = Body(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> ExcelToDictListResponse:
+    try:
+        # 校验token
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+        # 调用工具函数
+        result = await read_excel_from_minio_to_dictlist(request.excel_minio_uri)
+        return ExcelToDictListResponse(ok=0, failed="", excel_data=result["excel_data"])
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"excel_to_dictlist_api失败: {e}", exc_info=True)
+        return ExcelToDictListResponse(ok=1, failed=str(e), excel_data=[])

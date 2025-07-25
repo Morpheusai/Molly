@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 import json
 import os
@@ -5,9 +6,9 @@ from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
 from celery import Celery
-from fastapi import Depends, FastAPI, Request, HTTPException
+from fastapi import Depends, FastAPI, Request, HTTPException,status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -28,7 +29,17 @@ from src.api.api import (
     handle_ai_message_url,
     get_project_detail,
     get_project_stage_stats,
-    get_task_queue_status
+    get_task_queue_status,
+    delete_specific_session,
+    delete_sessions,
+    search_specific_session,
+    search_sessions,
+    add_sessions,
+    get_new_session_id,
+    update_session_name,
+    reset_conversation,
+    vcf_file_parse,
+    excel_to_dictlist_api,
 )
 from src.api.protocols import (
     UserInput, 
@@ -36,25 +47,41 @@ from src.api.protocols import (
     PredictUserInputRequest, 
     PredictUserInputAgentRequest,
     CustomPredictUserInputRequest, 
+    VcfParseRequest, 
+    VcfParseResponse,
 )
+from src.api.api import insert_user_input_chat
 from src.db.conversation_model import ConversationModel
 from src.db.patient_model import PatientModel
 from src.db.workflows_model import WorkflowModel
 from src.db.prediction_model import PredictionModel
+from src.db.file_model import FileModel
 from src.config import g_config
 from src.file.download_router import router as download_router
 from src.file.display_router import router as display_router
 from src.file.upload_sequence_files_router import router as upload_router
 from src.file.extract_patient_info_router import router as extract_router
 from src.file.markdown_download_router import router as markdown_download_file
+from src.file.delete_router import router as delete_file_router
+from src.file.upload_tumor_normal_files_router import router as tumor_normal_upload_router
+from src.model.openai_engine import proxy_stream_generator
 from src.utils import logger
 from src.utils.jwt_util import create_system_token, decode_vaild
-from src.utils.mysql_db import search_unionid_sql, insert_message_sql,get_conversation_id_by_patient_and_type_sql,insert_task_queue_record
+from src.utils.mysql_db import (
+    search_unionid_sql,
+    insert_message_sql,
+    get_conversation_id_by_patient_and_type_sql,
+    insert_task_queue_record,
+    update_conversation_title_and_time,
+)
 from src.utils.minio import download_from_minio_uri
-from src.utils.utils import count_peptides,sliding_window_from_file,deduplicate_fasta_by_sequence
+from src.utils.utils import (
+    count_peptides,
+    sliding_window_from_file,
+    deduplicate_fasta_by_sequence,
+)
 from src.utils.session import get_async_db, get_async_session_local
 from src.utils.celery_task_agent import celery_agent
-from src.file.delete_router import router as delete_file_router
 
 logger.info(f"========================start neo backend==============================")
 
@@ -252,6 +279,7 @@ async def wechat_callback(app_id: str, code: str,state: Optional[str] = None) ->
         "role": role
     }
 
+#默认工具参数预测接口
 @app.post("/backend/predict_antigen_chat")
 async def backend_chat_with_files(
     request: Request,
@@ -453,13 +481,13 @@ async def predict_antigen_with_custom_params(
 
             user_input = CustomPredictUserInputRequest(**body)
             logger.info(f"Validated model: {user_input.dict()}")
-            
+
             # 判断前端是否传了parameters参数
-            if 'parameters' not in body:
+            if "parameters" not in body:
                 logger.info("前端未传入parameters参数，将使用默认参数")
             else:
                 logger.info(f"前端传入了parameters参数: {user_input.parameters}")
-                
+
         except json.JSONDecodeError as e:
             logger.error(f"JSON解析失败: {str(e)}")
             return await generate_error_response("Invalid JSON format")
@@ -475,7 +503,9 @@ async def predict_antigen_with_custom_params(
             raise HTTPException(status_code=401, detail="无效的用户认证")
 
         # 3. 通过conversation_id查找会话和病人
-        conversation_id = await get_conversation_id_by_patient_and_type_sql(int(user_input.patient_id), "predict_neo_antigen")
+        conversation_id = await get_conversation_id_by_patient_and_type_sql(
+            int(user_input.patient_id), "predict_neo_antigen"
+        )
         patient_id = user_input.patient_id
         conversation = await db.get(ConversationModel, int(conversation_id))
         if not conversation:
@@ -485,7 +515,7 @@ async def predict_antigen_with_custom_params(
             return await generate_error_response("病人信息不存在")
 
         # === 新增：始终新建PredictionModel ===
-        
+
         new_prediction = PredictionModel(
             patient_id=patient_id,
             result=None,
@@ -506,8 +536,12 @@ async def predict_antigen_with_custom_params(
             cdr3 = [cdr.strip() for cdr in patient.CDR_type.split(',') if cdr.strip()]
 
         # 5. 先插入一条用户消息
-        await insert_message_sql(conversation_id=conversation_id, type='user',content="完成自定义参数收集，开始预测")
-        
+        await insert_message_sql(
+            conversation_id=conversation_id,
+            type="user",
+            content="完成自定义参数收集，开始预测",
+        )
+
         # 6. 更新工作流状态为pending
         # 查找对应stage的工作流记录（新抗原预测阶段，rank=3）
         workflow = await db.execute(
@@ -520,7 +554,7 @@ async def predict_antigen_with_custom_params(
         if workflow:
             workflow.status = 'pending'
             await db.commit()
-        
+
         # === 关键：predict_id 一定用新建的 prediction_id ===
         if user_input.parameters['netchop']['peptide_length'] == []:
             user_input.parameters['netchop']['peptide_length'] = [-1]
@@ -562,7 +596,7 @@ async def predict_antigen_with_custom_params(
                     .where(WorkflowModel.rank == 3)
                 )
                 workflow_record = workflow_result.scalar_one_or_none()
-                
+
                 if workflow_record:
                     logger.info(f"找到工作流记录，当前状态: {workflow_record.status}")
                     workflow_record.status = 'completed'
@@ -576,7 +610,7 @@ async def predict_antigen_with_custom_params(
                     logger.warning(f"未找到工作流记录，patient_id: {patient_id}")
             except Exception as e:
                 logger.error(f"on_complete回调执行失败: {e}", exc_info=True)
-        
+
         # 先插入 task_queue，celery_task_id 为空，获取主键id
         task_queue_id = await insert_task_queue_record(patient_id, conversation_id, total_after,",".join(map(str, window_sizes)))
         # 发送 celery 任务，task_queue_id 作为 kwargs 传递
@@ -600,9 +634,192 @@ async def predict_antigen_with_custom_params(
         logger.exception("处理请求时发生未捕获的异常:")
         return await generate_error_response(str(e))
 
+
+# 存储每个会话的停止事件
+stop_events: Dict[str, asyncio.Event] = {}
+
+
+@app.post("/backend/chat_with_files")
+async def backend_chat_with_files(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_async_db)
+) -> StreamingResponse:
+    """代理聊天接口，支持文件上传信息，流式转发到目标服务器"""
+
+    async def generate_error_response(error_msg: str):
+        """生成错误响应的辅助函数"""
+        error_data = json.dumps({
+            "type": "error",
+            "content": error_msg
+        })
+        return StreamingResponse(
+            iter([f"data: {error_data}\n\n"]),
+            media_type="text/event-stream"
+        )
+
+    try:
+        raw_body = await request.body()
+        logger.info(f"Raw request body: {raw_body.decode('utf-8')}")
+
+        body = await request.json()
+        logger.info(
+            f"Parsed JSON body: {json.dumps(body, ensure_ascii=False)}")
+
+        user_input = UserInput(**body)
+        logger.info(f"Validated model: {user_input.dict()}")
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON解析失败: {str(e)}")
+        return await generate_error_response("Invalid JSON format")
+    except ValidationError as e:
+        logger.error(f"模型验证失败: {e.errors()}")
+        return await generate_error_response(str(e.errors()))
+    except Exception as e:
+        logger.exception("未捕获的异常:")
+        return await generate_error_response(str(e.errors()))
+    # 提取并校验 token
+    system_token = credentials.credentials  # 直接获取Token
+    payload = decode_vaild(system_token,
+                           SECRET_KEY, algorithms=[ALGORITHM])
+    unionid: str = payload.get("sub")
+    if unionid is None:
+        raise HTTPException(status_code=401, detail="无效的用户认证")
+    conversation_id = user_input.conversation_id
+    prompt = user_input.prompt
+
+    # 调用mysql_db.py中的函数更新会话title和更新时间
+    await update_conversation_title_and_time(conversation_id, prompt)
+
+    # 更新 conversation 和插入用户输入
+    msg_id = await insert_user_input_chat(conversation_id, query=prompt)
+    logger.info(f"Generated msg_id: {msg_id}")
+
+    # 初始化停止事件
+    stop_event = stop_events.setdefault(conversation_id, asyncio.Event())
+    stop_event.clear()
+
+    # 根据 conversation_id 从数据库查询所有文件
+    # uploaded_files = await db.execute(
+    #     select(FileModel).where(
+    #         FileModel.conversation_id == conversation_id,
+    #         FileModel.file_status == True,
+    #         FileModel.file_type != "neo_default_file"
+    #     )
+    # )
+    # uploaded_files = uploaded_files.scalars().all()
+
+    # 构造 file_list
+    file_groups = []
+    # if uploaded_files:
+    #     logger.info(
+    #         f"Found {len(uploaded_files)} files for conversation_id: {conversation_id}")
+    #     files = []
+    #     for uploaded_file in uploaded_files:
+    #         file_name, file_content = get_file_content(uploaded_file.file_path)
+    #         logger.info(
+    #             f"File: {file_name}, Content length: {len(file_content)}")
+    #         files.append(FileInfo(
+    #             file_name=file_name,
+    #             file_content=file_content,
+    #             file_path=uploaded_file.file_path,
+    #             file_desc=uploaded_file.file_desc,
+    #             file_origin=uploaded_file.file_origin
+    #         ))
+    #     if files:
+    #         file_groups.append(
+    #             FileGroup(conversation_id=conversation_id, files=files))
+    #         logger.info(f"Files: {files}, file_groups: {file_groups}")
+    # else:
+    #     logger.warning(
+    #         f"No files found in DB for conversation_id: {conversation_id}")
+    # 更新 user_input.file_list
+    user_input.file_list = file_groups
+    logger.info(
+        f"Final file_list length: {len(file_groups)} for conversation_id: {conversation_id}")
+    return StreamingResponse(
+        proxy_stream_generator(
+            user_input, conversation_id, stop_event, stop_events),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
+@app.post("/backend/stop")
+async def stop(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    body = await request.body()
+    try:
+        # 提取并校验基础参数
+        system_token = credentials.credentials
+        data = json.loads(body.decode("utf-8"))
+        conversation_id = data.get("conversation_id")
+
+        # 参数校验
+        if not system_token:
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "ok": 1,
+                    "failed": "Missing 'system_token' field"
+                }
+            )
+        if not conversation_id:
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "ok": 1,
+                    "failed": "Missing 'conversation_id' field"
+                }
+            )
+        # 校验token有效性
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if unionid is None:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "ok": 1,
+                    "failed": "unionid不存在"
+                }
+            )
+        # 设置停止事件
+        if conversation_id in stop_events:
+            stop_events[conversation_id].set()
+        # 成功响应
+        return {
+            "ok": 0,
+            "failed": ""
+        }
+    except json.JSONDecodeError:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "ok": 1,
+                "failed": "Invalid JSON format"
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "ok": 1,
+                "failed": f"Internal server error: {str(e)}"
+            }
+        )
+
+
 app.include_router(upload_router, prefix="/backend")
 
 app.include_router(extract_router, prefix="/backend")
+
+app.include_router(tumor_normal_upload_router, prefix="/backend")
 
 app.post("/backend/create_medical_records",
          tags=["病人信息"], summary="创建病历")(create_medical_records)
@@ -638,6 +855,13 @@ app.post("/backend/get_project_detail", tags=["项目管理"], summary="获取�
 
 app.post("/backend/get_project_stage_stats", tags=["项目管理"], summary="获取项目阶段统计信息")(get_project_stage_stats)
 
+# 注册任务队列状态接口
+app.post("/backend/task_queue_status", tags=["任务队列"], summary="获取任务队列状态")(get_task_queue_status)
+
+app.post("/backend/vcf_file_parse", tags=["文件处理"], summary="VCF文件解析")(vcf_file_parse)
+
+app.post("/backend/excel_to_dictlist", tags=["文件处理"], summary="根据minio路径读取excel并返回字典列表")(excel_to_dictlist_api)
+
 app.include_router(download_router, prefix="/backend")
 app.include_router(display_router, prefix="/backend")
 # app.include_router(weblogo_generate, prefix="/backend")
@@ -645,37 +869,34 @@ app.include_router(display_router, prefix="/backend")
 app.include_router(markdown_download_file, prefix="/backend")
 app.include_router(delete_file_router, prefix="/backend")
 
-# 注册任务队列状态接口
-app.post(
-    "/backend/task_queue_status",
-    tags=["任务队列"], summary="获取任务队列状态"
-)(get_task_queue_status)
+
+
 
 # app.post("/query_user_info", tags=["用户数据"], summary="查询用户信息")(query_user_info)
 
-# app.post("/backend/delete_specific_session",
-#          tags=["会话数据"], summary="删除特定会话")(delete_specific_session)
+app.post("/backend/delete_specific_session",
+         tags=["会话数据"], summary="删除特定会话")(delete_specific_session)
 
-# app.post("/backend/delete_sessions",
-#          tags=["会话数据"], summary="删除全部会话")(delete_sessions)
+app.post("/backend/delete_sessions",
+         tags=["会话数据"], summary="删除全部会话")(delete_sessions)
 
-# app.post("/backend/search_specific_session",
-#          tags=["会话数据"], summary="查询单一会话")(search_specific_session)
+app.post("/backend/search_specific_session",
+         tags=["会话数据"], summary="查询单一会话")(search_specific_session)
 
-# app.post("/backend/search_sessions",
-#          tags=["会话数据"], summary="查询会话历史")(search_sessions)
+app.post("/backend/search_sessions",
+         tags=["会话数据"], summary="查询会话历史")(search_sessions)
 
-# app.post("/backend/add_sessions",
-#          tags=["会话数据"], summary="新建会话记录信息")(add_sessions)
+app.post("/backend/add_sessions",
+         tags=["会话数据"], summary="新建会话记录信息")(add_sessions)
 
-# app.post("/backend/get_new_session_id",
-#          tags=["会话数据"], summary="返回会话id")(get_new_session_id)
+app.post("/backend/get_new_session_id",
+         tags=["会话数据"], summary="返回会话id")(get_new_session_id)
 
-# app.post("/backend/update_session_name",
-#          tags=["会话数据"], summary="更改会话名称")(update_session_name)
+app.post("/backend/update_session_name",
+         tags=["会话数据"], summary="更改会话名称")(update_session_name)
 
-# app.post("/backend/reset_session_messages",
-#          tags=["重置会话"], summary="初始化会话消息")(reset_conversation)
+app.post("/backend/reset_session_messages",
+         tags=["重置会话"], summary="初始化会话消息")(reset_conversation)
 
 
 

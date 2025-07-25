@@ -1,21 +1,22 @@
-import httpx
-import json
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Body
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Dict
 import aiofiles
 import asyncio
 import hashlib
 import os
 import uuid
+import base64
+import httpx
+import json
+
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Body
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Dict
 from pathlib import Path
 from minio.error import S3Error
+
 from src.db.file_model import FileModel
 from src.utils.base import get_async_session_local
 from src.utils.jwt_util import decode_vaild
 from src.utils.minio import minio_client, bucket_molly
-import base64
-
 from src.api.protocols import PatientInfoRequest, PatientInfoResponse, DescRequest, DescResponse
 from src.utils.log import logger
 from src.config import g_config
@@ -192,24 +193,42 @@ async def extract_patient_info_from_file(
 
 @router.post("/extract_patient_info", response_model=PatientInfoResponse)
 async def extract_patient_info(
-    request: PatientInfoRequest
+    request: PatientInfoRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> Dict:
     """
-    从文本中提取病人信息。
+    从文本中提取病人信息，并更新病人的病历记录。
     
     Args:
-        request (PatientInfoRequest): 包含病人信息文本的请求
+        request (PatientInfoRequest): 包含病人ID和病人信息文本的请求
+        session: 数据库会话
         
     Returns:
         Dict: 包含结构化病人信息的响应
     """
+    # 校验token，获取unionid
+    SECRET_KEY = os.getenv("SECRET_KEY", "")
+    ALGORITHM = os.getenv("ALGORITHM", "HS256")
+    try:
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if unionid is None:
+            raise HTTPException(status_code=401, detail="unionid不存在")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Token验证失败: {str(e)}")
+        raise HTTPException(status_code=401, detail=f"无效的token: {str(e)}")
+    
     try:
         # 调用提取服务
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
+                # 只传递 patient_info 字段
                 response = await client.post(
                     EXTRACT_SERVICE_URL,
-                    json=request.dict()
+                    json={"patient_info": request.patient_info}
                 )
                 
                 if response.status_code != 200:
@@ -220,6 +239,7 @@ async def extract_patient_info(
                 
                 # 解析响应
                 result = response.json()
+            
                 return PatientInfoResponse(structured_info=result["structured_info"])
                 
             except httpx.ConnectError as e:
@@ -233,7 +253,6 @@ async def extract_patient_info(
                     status_code=500,
                     detail=f"处理请求时发生错误: {str(e)}"
                 )
-                
     except Exception as e:
         logger.error(f"处理请求时发生错误: {str(e)}", exc_info=True)
         raise HTTPException(

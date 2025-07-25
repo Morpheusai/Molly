@@ -8,11 +8,11 @@ from typing import AsyncGenerator, List, Dict
 
 from src.api.protocols import UserInput
 from src.config import g_config
-# from src.utils.mysql_db import process_messages
+from src.utils.mysql_db import process_messages
 from src.utils.log import logger
 
 
-async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversation_id: str, stop_event: asyncio.Event, stop_events: Dict[str, asyncio.Event]) -> AsyncGenerator[str, None]:
+async def proxy_stream_generator(user_input: UserInput, conversation_id: int, stop_event: asyncio.Event, stop_events: Dict[str, asyncio.Event]) -> AsyncGenerator[str, None]:
     """
     代理生成器，转发远程服务器的 SSE 流，并在流结束后进行数据库操作。
     """
@@ -23,8 +23,10 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
         target_url = g_config["url"]["target_pmhc_affinity_prediction_stream_url"]
     elif user_input.conversation_chat_type == "patient_case_mrna":
         target_url = g_config["url"]["target_patient_case_mrna_stream_url"]     
-    elif user_input.conversation_chat_type == "target_predict_neo_antigen_stream_stream_url":
-        target_url = g_config["url"]["target_neo_antigen_stream_stream_url"]              
+    elif user_input.conversation_chat_type == "neo_antigen":
+        target_url = g_config["url"]["target_neo_antigen_stream_stream_url"] 
+    elif user_input.conversation_chat_type == "qa_predict_neo":
+        target_url = g_config["url"]["target_qa_predict_neo_stream_url"]       
     # 构造请求参数
     json_data = user_input.dict()
 
@@ -49,7 +51,7 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
     content_dict = {}
     content = ""
     chunk_queue = deque()
-    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=g_config["time"].get("agent_http_timeout", 1800))) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=1800.0)) as client:
         try:
             async with client.stream(
                 "POST",
@@ -70,8 +72,6 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                 async for chunk in response.aiter_text():
                     # 检查是否停止
                     if stop_event.is_set():  # 使用 stop_event 检查
-                        yield "data: [DONE]\n\n"
-                        await response.aclose()
                         break
                     buffer += chunk  # 将新数据加入缓冲区
                     # 检查缓冲区是否包含完整的 SSE 消息（以 \n\n 结尾）
@@ -103,14 +103,13 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
             if chunk.startswith("data:"):
                 try:
                     data = json.loads(chunk[5:].strip())
-                    if data.get("content", "") == "#NEO_RESPONSE#" or data.get("content", "") == "#NEO_RESPONSE#\n":
+                    if data.get("content", "") == "#NEO_RESPONSE#":
                         response_table_nums += 1
                         msg_response = (
                                     msg_response or "") + "#NEO_RESPONSE#"
                     elif response_table_nums % 2 != 0:
                         #添加后标签词#NEO#
                             content = data.get("content", "")
-                            
                             msg_response = (
                                         msg_response or "") + content
 
@@ -195,7 +194,4 @@ async def proxy_stream_generator(user_input: UserInput, msg_id: str, conversatio
                 # tool_result_analysis_list+=current_response
 
     # 处理消息
-    # await process_messages(msg_id, conversation_id, ai_messages, tool_messages, tool_result_analysis_list, msg_response, tool_middle_result)
-
-#data: {"type": "writer_token", 
-#       "content": "{\"type\": \"link\", \"url\": {\"rnaflod_result_file_url\": \"minio://rnafold-results/65c27f5cc37644cfa681507ba375d611_RNAFold_results.xlsx\", \"sequence_0002_ss\": \"minio://rnaplot-results/2f024614521548eeb211c21e21449b2f_svg_file.svg\", \"sequence_0001_ss\": \"minio://rnaplot-results/51d00ab44bce452186457caa75bbda66_svg_file.svg\"}, \"content\": \"\"}"}
+    await process_messages(conversation_id, ai_messages, tool_messages, tool_result_analysis_list, msg_response, tool_middle_result)

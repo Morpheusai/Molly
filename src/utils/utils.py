@@ -1,9 +1,16 @@
 import os
+import httpx
 
+import pandas as pd
 from typing import List,Tuple
 
 from src.utils.minio import upload_file_to_minio,download_from_minio_uri
+import mimetypes
+import hashlib
+import base64
+from src.config import g_config
 
+target_desc_url = g_config["url"]["target_desc_url"]
 
 #从minio路径获取肽段数
 def count_peptides(fasta_path: str) -> int:
@@ -104,3 +111,141 @@ def deduplicate_fasta_by_sequence(fasta_str: str) -> Tuple[str, int, int]:
             i += 1
     # 输出时每个序列单独一行（即使输入是多行）
     return '\n'.join(result), total_before, total_after
+
+async def get_file_desc(file_name: str, file_data: bytes, content_type: str) -> str:
+    text_types = {"text/plain", "application/json", "text/csv", "application/x-fasta","sequence_file"}
+    is_text_candidate = (
+        content_type in text_types or
+        file_name.lower().endswith(".fas") or
+        file_name.lower().endswith(".vcf") 
+    )
+    if is_text_candidate:
+        try:
+            file_content = file_data.decode("utf-8")
+        except UnicodeDecodeError:
+            file_content = base64.b64encode(file_data).decode("utf-8")
+    else:
+        file_content = base64.b64encode(file_data).decode("utf-8")
+    request_data = {"file_name": file_name, "file_content": file_content}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=30.0)) as client:
+        try:
+            response = await client.post(target_desc_url, json=request_data)
+            if response.status_code != 200:
+                return f"DescAgent error: {response.status_code} {response.text}"
+            return response.json().get("file_description", "")
+        except Exception as e:
+            return f"DescAgent调用失败: {str(e)}"
+
+
+async def read_excel_from_minio_to_dictlist_fasta(minio_uri: str, bucket_name: str):
+    """
+    从MinIO下载Excel文件并转为字典列表，并返回excel和fasta文件的详细信息
+    :param minio_uri: MinIO文件地址（如minio://bucket/path/to/file.xlsx）
+    :return: {
+        'excel_data': List[dict],
+        'source_file_info': {...},
+        'fasta_file_info': {...}
+    }
+    """
+    # 下载文件到本地
+    local_path = download_from_minio_uri(minio_uri)
+    # 读取Excel
+    df = pd.read_excel(local_path)
+    # 转为字典列表
+    result = df.to_dict(orient="records")
+
+    # 生成fasta内容
+    fasta_lines = []
+    for _, row in df.iterrows():
+        ref_pep = str(row['Reference_Peptide'])
+        consequence = str(row['Consequence'])
+        aa_change = str(row['AA_Change']).replace('>', '-')
+        mut_context = str(row['mut_context'])
+        fasta_id = f">{ref_pep}_{consequence}_{aa_change}"
+        fasta_lines.append(fasta_id)
+        fasta_lines.append(mut_context)
+    fasta_content = "\n".join(fasta_lines)
+
+    # 保存fasta文件
+    fasta_path = os.path.splitext(local_path)[0] + ".fasta"
+    with open(fasta_path, 'w', encoding='utf-8') as f:
+        f.write(fasta_content)
+
+    # 上传fasta到minio
+    fasta_minio_path = upload_file_to_minio(fasta_path, bucket_name, os.path.basename(fasta_path))
+
+    # 获取源文件信息
+    with open(local_path, 'rb') as f:
+        source_data = f.read()
+    source_file_name = os.path.basename(local_path)
+    source_file_size = len(source_data)
+    source_file_type = "vcf_excel"
+    source_file_hash = hashlib.sha256(source_data).hexdigest()
+    # 获取描述
+    try:
+        source_file_desc = await get_file_desc(source_file_name, source_data, source_file_type)
+    except Exception as e:
+        source_file_desc = f"DescAgent调用失败: {str(e)}"
+    source_file_info = {
+        "file_name": source_file_name,
+        "file_size": source_file_size,
+        "file_type": source_file_type,
+        "file_path": minio_uri,
+        "file_hash": source_file_hash,
+        "file_desc": source_file_desc,
+        "file_source": "1"
+    }
+
+    # 获取fasta文件信息
+    with open(fasta_path, 'rb') as f:
+        fasta_data = f.read()
+    fasta_file_name = os.path.basename(fasta_path)
+    fasta_file_size = len(fasta_data)
+    fasta_file_type = "sequence_file"
+    fasta_file_hash = hashlib.sha256(fasta_data).hexdigest()
+    try:
+        fasta_file_desc = await get_file_desc(fasta_file_name, fasta_data, fasta_file_type)
+    except Exception as e:
+        fasta_file_desc = f"DescAgent调用失败: {str(e)}"
+    fasta_file_info = {
+        "file_name": fasta_file_name,
+        "file_size": fasta_file_size,
+        "file_type": fasta_file_type,
+        "file_path": fasta_minio_path,
+        "file_hash": fasta_file_hash,
+        "file_desc": fasta_file_desc,
+        "file_source": "01"  
+    }
+
+    # 删除本地文件
+    os.remove(local_path)
+    os.remove(fasta_path)
+    return {
+        "excel_data": result,
+        "source_file_info": source_file_info,
+        "fasta_file_info": fasta_file_info
+    }
+
+
+async def read_excel_from_minio_to_dictlist(minio_uri: str):
+    """
+    从MinIO下载Excel文件并转为字典列表，并返回excel的list[dict]
+    :param minio_uri: MinIO文件地址（如minio://bucket/path/to/file.xlsx）
+    :return: {
+        'excel_data': List[dict],
+        'source_file_info': {...},
+        'fasta_file_info': {...}
+    }
+    """
+    # 下载文件到本地
+    local_path = download_from_minio_uri(minio_uri)
+    # 读取Excel
+    df = pd.read_excel(local_path)
+    # 转为字典列表
+    result = df.to_dict(orient="records")
+
+    # 删除本地文件
+    os.remove(local_path)
+    return {
+        "excel_data": result
+    }

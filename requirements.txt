@@ -61,3 +61,4 @@ uvicorn==0.34.0
 weblogo==3.7.12
 redis==5.0.7
 celery==5.4.0
+pandas==2.3.1

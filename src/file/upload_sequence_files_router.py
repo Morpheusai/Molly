@@ -380,7 +380,7 @@ async def upload_attachment(file: UploadFile, patient_id: int, unionid: str, ses
             "file_path": str(local_file_path),  # 默认是本地地址，成功时改为 minio路径
             "file_hash": file_hash,
             "file_status": False,  # 默认失败，成功时改为 True
-            "file_source": 0,  # 0表示用户上传
+            "file_source": "02",  # 02表示fasta文件是由用户上传得到的
             "file_desc": "",
         }
 

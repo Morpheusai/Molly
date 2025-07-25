@@ -25,115 +25,6 @@ class AddUserRequest(BaseModel):
     created_by: Optional[str] = None  # 邀请人unionid
     is_active: bool = True  # 是否激活，默认True
 
-# #查询用户信息请求模型    
-# class QueryUserInfoRequest(BaseModel):
-#     openid : str  # 普通用户的标识，对当前开发者账号唯一
-#     unionid: str     # 用户统一标识。针对一个微信开放平台账号下的应用，同一用户的unionid是唯一的    
-
-# #查询用户信息响应模型
-# class QueryUserInfoResponse(BaseModel):
-#     unionid: str  # 用户统一标识。针对一个微信开放平台账号下的应用，同一用户的unionid是唯一的
-#     openid: str  # 普通用户的标识，对当前开发者账号唯一
-#     nickname: Optional[str] = None  # 普通用户昵称
-#     sex: Optional[int] = None  # 普通用户性别，1为男性，2为女性
-#     province: Optional[str] = None  # 普通用户个人资料填写的省份
-#     city: Optional[str] = None  # 普通用户个人资料填写的城市
-#     country: Optional[str] = None  # 国家，如中国为CN
-#     headimgurl: Optional[str] = None  # 用户头像，最后一个数值代表正方形头像大小
-#     privilege: Optional[List[str]] = None  # 用户特权信息，json数组，如微信沃卡用户为（chinaunicom）
-
-
-# #删除单一会话的请求模型
-# class DeleteSessionRequest(BaseModel):
-#     conversation_id: str  # 会话 ID  
-
-# # #查询会话历史请求模型
-# # class SessionsRequest(BaseModel):
-# #     # user_id: str     # 微信用户 unionid
-# #     system_token: str
-
-
-
-# #查询单一会话请求模型
-# class QuerySingleSessionRequest(BaseModel):
-#     conversation_id: str  # 会话 ID    
-
-# #单条会话信息
-# class SessionItem(BaseModel):
-#     conversation_id: str  # 会话 ID
-#     session_title: str  # 会话标题
-#     updata_time: str   # 更新时间
-#     create_time: str  # 创建时间 
-#     chat_type : str #会话类型
-    
-
-    
-# #查询会话历史响应模型
-# class QuerySessionsResponse(BaseModel):
-#     ok: int          # 0 表示成功，非 0 表示失败
-#     failed: str      # 失败原因（如果成功则为空字符串）
-#     sessions: List[SessionItem]  # 会话列表
-
-# #单条聊天记录
-# class ChatItem(BaseModel):
-#     query: Optional[str] = None  # 用户输入
-#     response: Optional[str] = None  # AI 回复
-
-# class ToolItem(BaseModel):
-#     tool_name: str
-#     tool_args: str  
-#     tool_result: str  
-#     create_time: str
-#     tool_result_analysis :str
-#     tool_middle_result :str
-
-# class ChatItemWithTools(BaseModel):
-#     id: str
-#     query: str
-#     response: Optional[str] = None
-#     create_time: str
-#     tools: Optional[List[ToolItem]] = None
-
-# class FileItem(BaseModel):
-#     file_name: str
-#     file_path: str
-#     file_desc: str
-
-# class QuerySessionResponse(BaseModel):
-#     ok: int
-#     failed: str
-#     conversation_id: str
-#     session_title: str
-#     chat_type:str
-#     chats: Optional[List[ChatItemWithTools]] = None  # 可以是 None 或 List[ChatItemWithTools]
-#     files: Optional[List[FileItem]] = None  # 可以是 None 或 List[FileItem]
-#     neo_files: Optional[List[FileItem]] = None
-
-# # 单一会话的响应模型   
-# # class QuerySessionResponse(BaseModel):
-# #     conversation_id: str  # 会话 ID
-# #     ok: int          # 0 表示成功，非 0 表示失败
-# #     failed: str      # 空表示成功，否则是出错信息
-# #     chats: List[ChatItem]  # 聊天记录列表   
-
-          
-# #新建会话请求模型
-# class AddSessionRequest(BaseModel):
-#     session_title: Optional[str] = "新会话"    # 会话标题  
-#     chat_type: str = "normal"
-
-# #聊天消息请求模型
-# class ChatRequest(BaseModel):
-#     prompt: str
-
-# #新建会话记录响应模型
-# class SessionResponse(BaseResponse):
-#     conversation_id: str
-
-# #更改会话名称请求模型    
-# class UpdateSessionRequest(BaseModel):
-#     conversation_id: str  # 会话 ID 
-#     session_title: Optional[str] = "新会话"    # 会话标题     
 
 class FileInfoWithContent(BaseModel):
     file_name: str = Field(description="文件名")
@@ -149,7 +40,7 @@ class FileGroup(BaseModel):
 class UserInput(BaseModel):
     """User input processed by the FastAPI server and sent to the target server."""
     prompt: str = Field(description="用户输入")
-    conversation_id: str = Field(description="会话id")
+    conversation_id: int = Field(description="会话id")
     file_list: List[FileGroup] = Field(description="传入文件列表", default=[])
     conversation_chat_type: str = Field(description="会话聊天类型", default="normal")
 
@@ -337,6 +228,7 @@ class CreateMedicalRecordRequest(BaseModel):
     source_id: Optional[int] = Field(default=None, description="病历来源文件ID，可不传")
     clinical_medication: Optional[str] = Field(default="", description="临床用药")
     clinical_diagnosis: Optional[str] = Field(default="", description="临床诊断")
+    medical_history: Optional[str] = Field(default="", description="病人病历")
 
 # 创建病历响应模型
 class CreateMedicalRecordResponse(BaseResponse):
@@ -406,6 +298,7 @@ class PatientDetailInfo(BaseModel):
     additional_info: str       # 附加信息
     clinical_medication: str | None = None  # 临床用药
     clinical_diagnosis: str | None = None   # 临床诊断
+    medical_history: str | None = None   # 病人病历
     status: str                # 病历状态
     updated_at: str | None = None  # 更新时间
 
@@ -469,6 +362,7 @@ class FileInfo(BaseModel):
     file_path: str  # 文件路径
     file_type: str  # 文件类型
     file_desc: str  # 文件描述
+    file_source: str  # 文件来源
 
 class PatientFilesResponse(BaseResponse):
     """
@@ -864,3 +758,82 @@ class DeleteFileResponse(BaseResponse):
     """
     can_delete: int = 0
 
+#删除单一会话的请求模型
+class DeleteSessionRequest(BaseModel):
+    conversation_id: int  # 会话 ID  
+
+#查询单一会话请求模型
+class QuerySingleSessionRequest(BaseModel):
+    conversation_id: int  # 会话 ID    
+
+class ChatItem(BaseModel):
+    id: int
+    type: str
+    content: Optional[str] = None
+    create_time: str
+
+class QuerySessionResponse(BaseModel):
+    ok: int
+    failed: str
+    conversation_id: int
+    session_title: str
+    chat_type:str
+    chats: Optional[List[ChatItem]] = None  # 可以是 None 或 List[ChatItem]
+
+#单条会话信息
+class SessionItem(BaseModel):
+    conversation_id: int  # 会话 ID
+    session_title: str  # 会话标题
+    update_time: str   # 更新时间
+    create_time: str  # 创建时间 
+    chat_type : str #会话类型
+    
+#查询会话历史响应模型
+class QuerySessionsResponse(BaseModel):
+    ok: int          # 0 表示成功，非 0 表示失败
+    failed: str      # 失败原因（如果成功则为空字符串）
+    sessions: List[SessionItem]  # 会话列表
+
+#新建会话请求模型
+class AddSessionRequest(BaseModel):
+    session_title: Optional[str] = "新会话"    # 会话标题  
+    chat_type: str = "qa_predict_neo"
+
+#新建会话记录响应模型
+class SessionResponse(BaseResponse):
+    conversation_id: int  # 会话 ID
+
+#更改会话名称请求模型    
+class UpdateSessionRequest(BaseModel):
+    conversation_id: int  # 会话 ID 
+    session_title: Optional[str] = "新会话"    # 会话标题     
+
+class ResetConversationRequest(BaseModel):
+    conversation_id: int  # 会话 ID
+
+class UploadTumorNormalFilesRequest(BaseModel):
+    patient_id: int = Field(..., description="病人ID")
+    # 文件字段在FastAPI路由中用File(...)接收，不在Pydantic模型中定义
+
+class UploadTumorNormalFilesResponse(BaseResponse):
+    tumor_file_name: str = Field(..., description="肿瘤文件名")
+    tumor_created_at: str = Field(..., description="肿瘤文件创建时间")
+    tumor_file_size: int = Field(..., description="肿瘤文件大小（字节）")
+    tumor_file_desc: str = Field(..., description="肿瘤文件描述")
+    normal_file_path: str = Field(..., description="正常文件的minio路径")
+    tumor_file_path: str = Field(..., description="肿瘤文件的minio路径")
+
+class VcfParseRequest(BaseModel):
+    patient_id: int = Field(..., description="病人ID")
+    normal_file: str = Field(..., description="正常vcf的minio路径")
+    tumor_file: str = Field(..., description="突变vcf的minio路径")
+
+class VcfParseResponse(BaseResponse):
+    excel_data: list = Field(default=[], description="Excel转为的字典列表")
+    fasta_file_minio_path: str = Field(default="", description="生成的fasta文件minio路径")
+
+class ExcelToDictListRequest(BaseModel):
+    excel_minio_uri: str = Field(..., description="Excel文件的MinIO路径（如minio://bucket/path/to/file.xlsx）")
+
+class ExcelToDictListResponse(BaseResponse):
+    excel_data: list = Field(default=[], description="Excel转为的字典列表")

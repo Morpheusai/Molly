@@ -7,12 +7,7 @@ from typing import List, Optional
 from collections import OrderedDict
 
 from dotenv import load_dotenv
-from fastapi import (
-    Body,
-    Depends,
-    HTTPException,
-    status
-)
+from fastapi import Body, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import delete, desc, update, asc, func, text
 from sqlalchemy.dialects.mysql import insert
@@ -43,21 +38,22 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "")  # 用于签名和验证 JWT 的密钥
 ALGORITHM = os.getenv("ALGORITHM", "HS256")  # 加密算法
 
+
 # 查询unionid的记录
 @with_async_session
 async def search_unionid_sql(session, unionid: str) -> Optional[UserModel]:
     """
     根据unionid查询用户记录
-    
+
     Args:
         unionid: 用户统一标识
-    
+
     Returns:
         UserModel实例 或 None（如果未找到）
     """
     if not unionid:
         raise HTTPException(status_code=401, detail="无效的用户认证")
-    
+
     try:
         # 使用更明确的查询方式
         stmt = select(UserModel).where(UserModel.unionid == unionid)
@@ -67,9 +63,10 @@ async def search_unionid_sql(session, unionid: str) -> Optional[UserModel]:
         logger.error(f"查询用户失败: {e}", exc_info=True)
         return None
 
+
 # 添加用户记录sql
 @with_async_session
-async def add_user_sql(session,  request: AddUserRequest = None):
+async def add_user_sql(session, request: AddUserRequest = None):
     try:
         user = UserModel(
             unionid=request.unionid,
@@ -89,32 +86,35 @@ async def add_user_sql(session,  request: AddUserRequest = None):
         await session.commit()
         await session.refresh(user)
 
-        return BaseResponse(
-            ok=0,
-            failed=""
-        )
+        return BaseResponse(ok=0, failed="")
     except Exception as e:
         await session.rollback()
-        return BaseResponse(
-            ok=1,
-            failed=str(e)
-        )
+        return BaseResponse(ok=1, failed=str(e))
+
 
 # 创建病历记录
-async def create_medical_records_sql(session, request: CreateMedicalRecordRequest, unionid: str):
+async def create_medical_records_sql(
+    session, request: CreateMedicalRecordRequest, unionid: str
+):
     try:
         # 判断是新增还是修改
         if request.patient_id and str(request.patient_id).isdigit():
             # 修改模式
             patient = await session.get(PatientModel, int(request.patient_id))
             if not patient:
-                return CreateMedicalRecordResponse(ok=1, failed="未找到该病人", patient_id=None)
+                return CreateMedicalRecordResponse(
+                    ok=1, failed="未找到该病人", patient_id=None
+                )
             # 更新字段
             patient.project_id = request.project_id
             patient.medical_record_number = request.medical_record_number or ""
             patient.name = request.name or ""
             patient.gender = request.gender or "other"
-            patient.birth_date = datetime.strptime(request.birth_date, "%Y-%m-%d").date() if request.birth_date else None
+            patient.birth_date = (
+                datetime.strptime(request.birth_date, "%Y-%m-%d").date()
+                if request.birth_date
+                else None
+            )
             patient.phone = request.phone or ""
             patient.email = request.email or ""
             patient.hospital = request.hospital or ""
@@ -124,9 +124,12 @@ async def create_medical_records_sql(session, request: CreateMedicalRecordReques
             patient.CDR_type = request.CDR_type or ""
             patient.treatment_state = request.treatment_state or ""
             patient.additional_info = request.additional_info or ""
-            patient.source_id = request.source_id if hasattr(request, 'source_id') else None
+            patient.source_id = (
+                request.source_id if hasattr(request, "source_id") else None
+            )
             patient.clinical_medication = request.clinical_medication or ""
             patient.clinical_diagnosis = request.clinical_diagnosis or ""
+            patient.medical_history = request.medical_history or ""
             # 这里不更新created_by/status等只读字段
             await session.commit()
             return CreateMedicalRecordResponse(ok=0, failed="", patient_id=patient.id)
@@ -134,10 +137,18 @@ async def create_medical_records_sql(session, request: CreateMedicalRecordReques
             # 原有创建逻辑
             patient = PatientModel(
                 project_id=request.project_id,
-                medical_record_number=request.medical_record_number if request.medical_record_number else "",
+                medical_record_number=(
+                    request.medical_record_number
+                    if request.medical_record_number
+                    else ""
+                ),
                 name=request.name if request.name else "",
                 gender=request.gender if request.gender else "other",
-                birth_date=datetime.strptime(request.birth_date, "%Y-%m-%d").date() if request.birth_date else None,
+                birth_date=(
+                    datetime.strptime(request.birth_date, "%Y-%m-%d").date()
+                    if request.birth_date
+                    else None
+                ),
                 phone=request.phone if request.phone else "",
                 email=request.email if request.email else "",
                 hospital=request.hospital if request.hospital else "",
@@ -145,36 +156,34 @@ async def create_medical_records_sql(session, request: CreateMedicalRecordReques
                 tumor_type=request.tumor_type if request.tumor_type else "",
                 HLA_type=request.HLA_type if request.HLA_type else "",
                 CDR_type=request.CDR_type if request.CDR_type else "",
-                treatment_state=request.treatment_state if request.treatment_state else "",
-                additional_info=request.additional_info if request.additional_info else "",
+                treatment_state=(
+                    request.treatment_state if request.treatment_state else ""
+                ),
+                additional_info=(
+                    request.additional_info if request.additional_info else ""
+                ),
                 clinical_medication=request.clinical_medication or "",
                 clinical_diagnosis=request.clinical_diagnosis or "",
+                medical_history=request.medical_history or "",
                 created_by=unionid,
-                status='new',
-                source_id=request.source_id if hasattr(request, 'source_id') else None
+                status="new",
+                source_id=request.source_id if hasattr(request, "source_id") else None,
             )
             session.add(patient)
             await session.commit()
             await session.refresh(patient)
             # 如果传了source_id，更新对应文件的patient_id
-            if getattr(request, 'source_id', None):
+            if getattr(request, "source_id", None):
                 file_obj = await session.get(FileModel, request.source_id)
                 if file_obj:
                     file_obj.patient_id = patient.id
                     await session.commit()
-            return CreateMedicalRecordResponse(
-                ok=0,
-                failed="",
-                patient_id=patient.id
-            )
+            return CreateMedicalRecordResponse(ok=0, failed="", patient_id=patient.id)
     except Exception as e:
         await session.rollback()
         logger.error(f"创建/修改病历失败: {e}", exc_info=True)
-        return CreateMedicalRecordResponse(
-            ok=1,
-            failed=str(e),
-            patient_id=None
-        )
+        return CreateMedicalRecordResponse(ok=1, failed=str(e), patient_id=None)
+
 
 @with_async_session
 async def get_patients_by_unionid_sql(session, unionid: str):
@@ -194,37 +203,54 @@ async def get_patients_by_unionid_sql(session, unionid: str):
             # 查询该病人所有文件
             files = []
             for file in patient.files:
-                files.append({
-                    'file_name': file.file_name,
-                    'file_type': file.file_type,
-                    'file_desc': file.file_desc,
-                    'file_path': file.file_path,
-                    'created_at': file.created_at.strftime('%Y-%m-%d %H:%M:%S') if file.created_at else None
-                })
-            result.append({
-                'patient_id': patient.id,
-                'medical_record_number': patient.medical_record_number,
-                'name': patient.name,
-                'gender': patient.gender,
-                'birth_date': patient.birth_date.strftime('%Y-%m-%d') if patient.birth_date else None,
-                'phone': patient.phone,
-                'email': patient.email,
-                'hospital': patient.hospital,
-                'blood_type': patient.blood_type,
-                'tumor_type': patient.tumor_type,
-                'HLA_type': patient.HLA_type,
-                'CDR_type': patient.CDR_type,
-                'treatment_state': patient.treatment_state,
-                'additional_info': patient.additional_info,
-                'status': patient.status,
-                'source_id': patient.source_id,
-                'created_at': patient.created_at.strftime('%Y-%m-%d %H:%M:%S') if patient.created_at else None,
-                'files': files
-            })
+                files.append(
+                    {
+                        "file_name": file.file_name,
+                        "file_type": file.file_type,
+                        "file_desc": file.file_desc,
+                        "file_path": file.file_path,
+                        "created_at": (
+                            file.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                            if file.created_at
+                            else None
+                        ),
+                    }
+                )
+            result.append(
+                {
+                    "patient_id": patient.id,
+                    "medical_record_number": patient.medical_record_number,
+                    "name": patient.name,
+                    "gender": patient.gender,
+                    "birth_date": (
+                        patient.birth_date.strftime("%Y-%m-%d")
+                        if patient.birth_date
+                        else None
+                    ),
+                    "phone": patient.phone,
+                    "email": patient.email,
+                    "hospital": patient.hospital,
+                    "blood_type": patient.blood_type,
+                    "tumor_type": patient.tumor_type,
+                    "HLA_type": patient.HLA_type,
+                    "CDR_type": patient.CDR_type,
+                    "treatment_state": patient.treatment_state,
+                    "additional_info": patient.additional_info,
+                    "status": patient.status,
+                    "source_id": patient.source_id,
+                    "created_at": (
+                        patient.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                        if patient.created_at
+                        else None
+                    ),
+                    "files": files,
+                }
+            )
         return result
     except Exception as e:
         logger.error(f"查询病人及文件失败: {e}", exc_info=True)
         return []
+
 
 @with_async_session
 async def get_patients_brief_by_unionid_sql(session, unionid: str):
@@ -233,21 +259,22 @@ async def get_patients_brief_by_unionid_sql(session, unionid: str):
     """
     try:
         patients = await session.execute(
-            select(PatientModel.id, PatientModel.name).where(PatientModel.created_by == unionid)
+            select(PatientModel.id, PatientModel.name).where(
+                PatientModel.created_by == unionid
+            )
         )
-        result = [
-            {"patient_id": row.id, "name": row.name} for row in patients.all()
-        ]
+        result = [{"patient_id": row.id, "name": row.name} for row in patients.all()]
         return result
     except Exception as e:
         logger.error(f"查询病人简要信息失败: {e}", exc_info=True)
         return []
 
+
 @with_async_session
 async def get_patient_detail_by_id_sql(session, patient_id: int):
     """
     根据病人ID查询该病人的详细信息（不返回id、source_id、created_at等字段）。
-    
+
     参数：
         session: 数据库会话，由装饰器自动注入
         patient_id: 需要查询的病人主键ID
@@ -261,23 +288,30 @@ async def get_patient_detail_by_id_sql(session, patient_id: int):
         if not patient:
             return None
         return {
-            'medical_record_number': patient.medical_record_number,
-            'name': patient.name,
-            'gender': patient.gender,
-            'birth_date': patient.birth_date.strftime('%Y-%m-%d') if patient.birth_date else None,
-            'phone': patient.phone,
-            'email': patient.email,
-            'hospital': patient.hospital,
-            'blood_type': patient.blood_type,
-            'tumor_type': patient.tumor_type,
-            'HLA_type': patient.HLA_type,
-            'CDR_type': patient.CDR_type,
-            'treatment_state': patient.treatment_state,
-            'additional_info': patient.additional_info,
-            'clinical_medication': patient.clinical_medication,
-            'clinical_diagnosis': patient.clinical_diagnosis,
-            'status': patient.status,
-            'updated_at': patient.updated_at.strftime('%Y-%m-%d %H:%M:%S') if patient.updated_at else None
+            "medical_record_number": patient.medical_record_number,
+            "name": patient.name,
+            "gender": patient.gender,
+            "birth_date": (
+                patient.birth_date.strftime("%Y-%m-%d") if patient.birth_date else None
+            ),
+            "phone": patient.phone,
+            "email": patient.email,
+            "hospital": patient.hospital,
+            "blood_type": patient.blood_type,
+            "tumor_type": patient.tumor_type,
+            "HLA_type": patient.HLA_type,
+            "CDR_type": patient.CDR_type,
+            "treatment_state": patient.treatment_state,
+            "additional_info": patient.additional_info,
+            "clinical_medication": patient.clinical_medication,
+            "clinical_diagnosis": patient.clinical_diagnosis,
+            "medical_history": patient.medical_history,
+            "status": patient.status,
+            "updated_at": (
+                patient.updated_at.strftime("%Y-%m-%d %H:%M:%S")
+                if patient.updated_at
+                else None
+            ),
         }
     except Exception as e:
         logger.error(f"查询病人详细信息失败: {e}", exc_info=True)
@@ -298,20 +332,14 @@ async def create_project_sql(session, request: CreateProjectRequest, unionid: st
         if request.project_id is not None:
             project = await session.get(ProjectModel, request.project_id)
             if not project:
-                return CreateProjectResponse(
-                    ok=1,
-                    failed="项目不存在",
-                    project_id=None
-                )
-            
+                return CreateProjectResponse(ok=1, failed="项目不存在", project_id=None)
+
             # 验证项目是否属于当前用户
             if project.created_by != unionid:
                 return CreateProjectResponse(
-                    ok=1,
-                    failed="无权修改此项目",
-                    project_id=None
+                    ok=1, failed="无权修改此项目", project_id=None
                 )
-            
+
             # 更新项目信息
             project.name = request.name
             project.project_code = request.project_code
@@ -331,14 +359,10 @@ async def create_project_sql(session, request: CreateProjectRequest, unionid: st
             project.status = request.status
             project.enrollment_criteria = request.enrollment_criteria
             project.updated_at = datetime.now()
-            
+
             await session.commit()
             await session.refresh(project)
-            return CreateProjectResponse(
-                ok=0,
-                failed="",
-                project_id=project.id
-            )
+            return CreateProjectResponse(ok=0, failed="", project_id=project.id)
         else:
             # 创建新项目
             project = ProjectModel(
@@ -359,24 +383,16 @@ async def create_project_sql(session, request: CreateProjectRequest, unionid: st
                 phone=request.phone,
                 patient_enrollment_count=request.patient_enrollment_count,
                 status=request.status,
-                enrollment_criteria=request.enrollment_criteria
+                enrollment_criteria=request.enrollment_criteria,
             )
             session.add(project)
             await session.commit()
             await session.refresh(project)
-            return CreateProjectResponse(
-                ok=0,
-                failed="",
-                project_id=project.id
-            )
+            return CreateProjectResponse(ok=0, failed="", project_id=project.id)
     except Exception as e:
         await session.rollback()
         logger.error(f"创建或更新项目失败: {e}", exc_info=True)
-        return CreateProjectResponse(
-            ok=1,
-            failed=str(e),
-            project_id=None
-        )
+        return CreateProjectResponse(ok=1, failed=str(e), project_id=None)
 
 
 async def get_projects_by_unionid_sql(session, unionid: str):
@@ -385,39 +401,51 @@ async def get_projects_by_unionid_sql(session, unionid: str):
     """
     try:
         projects = await session.execute(
-            select(ProjectModel)
-            .where(ProjectModel.created_by == unionid)
+            select(ProjectModel).where(ProjectModel.created_by == unionid)
         )
         result = []
         for project in projects.scalars().all():
-            result.append({
-                "project_id": project.id,
-                "name": project.name,
-                "project_code": project.project_code,
-                "short_name": project.short_name,
-                "description": project.description,
-                "project_type": project.project_type,
-                "indication": project.indication,
-                "study_phase": project.study_phase,
-                "is_multicenter": project.is_multicenter,
-                "registration_number": project.registration_number,
-                "registration_platform_url": project.registration_platform_url,
-                "principal_investigator": project.principal_investigator,
-                "pi_email": project.pi_email,
-                "hospital": project.hospital,
-                "phone": project.phone,
-                "patient_enrollment_count": project.patient_enrollment_count,
-                "doctor_enrollment_count": getattr(project, 'doctor_enrollment_count', None),
-                "status": project.status,
-                "created_at": project.created_at.strftime('%Y-%m-%d %H:%M:%S') if project.created_at else None,
-                "updated_at": project.updated_at.strftime('%Y-%m-%d %H:%M:%S') if project.updated_at else None,
-                "created_by": project.created_by,
-                "enrollment_criteria": project.enrollment_criteria
-            })
+            result.append(
+                {
+                    "project_id": project.id,
+                    "name": project.name,
+                    "project_code": project.project_code,
+                    "short_name": project.short_name,
+                    "description": project.description,
+                    "project_type": project.project_type,
+                    "indication": project.indication,
+                    "study_phase": project.study_phase,
+                    "is_multicenter": project.is_multicenter,
+                    "registration_number": project.registration_number,
+                    "registration_platform_url": project.registration_platform_url,
+                    "principal_investigator": project.principal_investigator,
+                    "pi_email": project.pi_email,
+                    "hospital": project.hospital,
+                    "phone": project.phone,
+                    "patient_enrollment_count": project.patient_enrollment_count,
+                    "doctor_enrollment_count": getattr(
+                        project, "doctor_enrollment_count", None
+                    ),
+                    "status": project.status,
+                    "created_at": (
+                        project.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                        if project.created_at
+                        else None
+                    ),
+                    "updated_at": (
+                        project.updated_at.strftime("%Y-%m-%d %H:%M:%S")
+                        if project.updated_at
+                        else None
+                    ),
+                    "created_by": project.created_by,
+                    "enrollment_criteria": project.enrollment_criteria,
+                }
+            )
         return result
     except Exception as e:
         logger.error(f"查询项目列表失败: {e}", exc_info=True)
         return []
+
 
 @with_async_session
 async def get_patients_brief_by_project_sql(session, project_id: int):
@@ -426,69 +454,96 @@ async def get_patients_brief_by_project_sql(session, project_id: int):
     """
     try:
         patients = await session.execute(
-            select(PatientModel)
-            .where(PatientModel.project_id == project_id)
+            select(PatientModel).where(PatientModel.project_id == project_id)
         )
         result = []
         for patient in patients.scalars().all():
-            result.append({
-                "patient_id": patient.id,
-                "project_id": patient.project_id,
-                "source_id": patient.source_id,
-                "medical_record_number": patient.medical_record_number,
-                "name": patient.name,
-                "gender": patient.gender,
-                "birth_date": patient.birth_date.strftime('%Y-%m-%d') if patient.birth_date else None,
-                "phone": patient.phone,
-                "email": patient.email,
-                "hospital": patient.hospital,
-                "blood_type": patient.blood_type,
-                "tumor_type": patient.tumor_type,
-                "HLA_type": patient.HLA_type,
-                "CDR_type": patient.CDR_type,
-                "treatment_state": patient.treatment_state,
-                "additional_info": patient.additional_info,
-                "clinical_medication": patient.clinical_medication,
-                "clinical_diagnosis": patient.clinical_diagnosis,
-                "status": patient.status,
-                "created_by": patient.created_by,
-                "created_at": patient.created_at.strftime('%Y-%m-%d %H:%M:%S') if patient.created_at else None,
-                "updated_at": patient.updated_at.strftime('%Y-%m-%d %H:%M:%S') if patient.updated_at else None
-            })
+            result.append(
+                {
+                    "patient_id": patient.id,
+                    "project_id": patient.project_id,
+                    "source_id": patient.source_id,
+                    "medical_record_number": patient.medical_record_number,
+                    "name": patient.name,
+                    "gender": patient.gender,
+                    "birth_date": (
+                        patient.birth_date.strftime("%Y-%m-%d")
+                        if patient.birth_date
+                        else None
+                    ),
+                    "phone": patient.phone,
+                    "email": patient.email,
+                    "hospital": patient.hospital,
+                    "blood_type": patient.blood_type,
+                    "tumor_type": patient.tumor_type,
+                    "HLA_type": patient.HLA_type,
+                    "CDR_type": patient.CDR_type,
+                    "treatment_state": patient.treatment_state,
+                    "additional_info": patient.additional_info,
+                    "clinical_medication": patient.clinical_medication,
+                    "clinical_diagnosis": patient.clinical_diagnosis,
+                    "status": patient.status,
+                    "created_by": patient.created_by,
+                    "created_at": (
+                        patient.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                        if patient.created_at
+                        else None
+                    ),
+                    "updated_at": (
+                        patient.updated_at.strftime("%Y-%m-%d %H:%M:%S")
+                        if patient.updated_at
+                        else None
+                    ),
+                }
+            )
         return result
     except Exception as e:
         logger.error(f"查询项目下病人简要信息失败: {e}", exc_info=True)
         return []
 
+
 @with_async_session
-async def get_patient_files_sql(session, patient_id: int, file_type: Optional[str] = None):
+async def get_patient_files_sql(
+    session, patient_id: int, file_type: Optional[str] = None
+):
     """
     查询指定病人id下所有文件的名、路径、类型及数量
     如果提供了file_type，则只查询该类型的文件
     """
     try:
-        query = select(FileModel.file_name, FileModel.file_path, FileModel.file_type, FileModel.file_desc) \
-            .where(FileModel.patient_id == patient_id, FileModel.is_deleted == 0)
+        query = select(
+            FileModel.file_name,
+            FileModel.file_path,
+            FileModel.file_type,
+            FileModel.file_desc,
+            FileModel.file_source,  # 新增字段
+        ).where(FileModel.patient_id == patient_id, FileModel.is_deleted == 0)
 
         if file_type:
             query = query.where(FileModel.file_type == file_type)
 
         files = await session.execute(query)
-        
+
         file_list = [
-            {"file_name": row.file_name, "file_path": row.file_path, "file_type": row.file_type, "file_desc": row.file_desc}
+            {
+                "file_name": row.file_name,
+                "file_path": row.file_path,
+                "file_type": row.file_type,
+                "file_desc": row.file_desc,
+                "file_source": row.file_source,  # 新增字段
+            }
             for row in files.all()
         ]
-        return {
-            "files": file_list,
-            "total": len(file_list)
-        }
+        return {"files": file_list, "total": len(file_list)}
     except Exception as e:
         logger.error(f"查询病人文件失败: {e}", exc_info=True)
         return {"files": [], "total": 0}
 
+
 @with_async_session
-async def create_conversation_sql(session, patient_id: int, conversation_type: str, title: str):
+async def create_conversation_sql(
+    session, patient_id: int, unionid: str, conversation_type: str, title: str
+):
     """
     创建新的会话记录
     Args:
@@ -502,27 +557,20 @@ async def create_conversation_sql(session, patient_id: int, conversation_type: s
     try:
         conversation = ConversationModel(
             patient_id=patient_id,
+            unionid=unionid,
             type=conversation_type,
             title=title,
-            is_deleted=0
+            is_deleted=0,
         )
         session.add(conversation)
         await session.commit()
         await session.refresh(conversation)
-        
-        return {
-            "ok": 0,
-            "failed": "",
-            "conversation_id": conversation.id
-        }
+
+        return {"ok": 0, "failed": "", "conversation_id": conversation.id}
     except Exception as e:
         await session.rollback()
         logger.error(f"创建会话记录失败: {e}", exc_info=True)
-        return {
-            "ok": 1,
-            "failed": str(e),
-            "conversation_id": None
-        }
+        return {"ok": 1, "failed": str(e), "conversation_id": None}
 
 
 @with_async_session
@@ -539,34 +587,32 @@ async def predict_process_messages(
     try:
         # 检查msg_response是否为空或只包含空白字符
         if not msg_response or msg_response.strip() == "":
-            logger.warning(f"msg_response为空，跳过创建assistant消息，conversation_id: {conversation_id}")
-            return BaseResponse(
-                ok=0,
-                failed=""
+            logger.warning(
+                f"msg_response为空，跳过创建assistant消息，conversation_id: {conversation_id}"
             )
-        
+            return BaseResponse(ok=0, failed="")
+
         # 创建新的assistant类型消息记录
         new_message = MessageModel(
             conversation_id=conversation_id,
-            type='assistant',
+            type="assistant",
             content=msg_response,
-            is_deleted=0
+            is_deleted=0,
         )
         session.add(new_message)
         await session.commit()
         await session.refresh(new_message)
-        
+
         # 保存新创建的消息ID，供后续tool记录使用
         msg_id = new_message.id
-        logger.info(f"成功创建assistant消息，message_id: {msg_id}, conversation_id: {conversation_id}")
-        
+        logger.info(
+            f"成功创建assistant消息，message_id: {msg_id}, conversation_id: {conversation_id}"
+        )
+
     except Exception as e:
         await session.rollback()
         logger.error(f"创建assistant消息失败: {e}", exc_info=True)
-        return BaseResponse(
-            ok=1,
-            failed=str(e)
-        )
+        return BaseResponse(ok=1, failed=str(e))
 
     # # 第二步：处理 Tool 消息
     # tool_calls_map = {}
@@ -616,8 +662,8 @@ async def predict_process_messages(
     #                     create_time=current_time,
     #                     tool_result_analysis=tool_analysis
     #                 )
-    #             )            
-    #         else:    
+    #             )
+    #         else:
     #             tool_models.append(
     #                 ToolModel(
     #                     id=new_id,
@@ -657,8 +703,9 @@ async def predict_process_messages(
     #             failed=str(e)
     #         )
 
+
 @with_async_session
-async def insert_message_sql(session, conversation_id: int, type:str,content: str):
+async def insert_message_sql(session, conversation_id: int, type: str, content: str):
     """
     插入一条用户消息到消息表
     Args:
@@ -671,10 +718,7 @@ async def insert_message_sql(session, conversation_id: int, type:str,content: st
     """
     try:
         new_message = MessageModel(
-            conversation_id=conversation_id,
-            type=type,
-            content=content,
-            is_deleted=0
+            conversation_id=conversation_id, type=type, content=content, is_deleted=0
         )
         session.add(new_message)
         await session.commit()
@@ -685,15 +729,16 @@ async def insert_message_sql(session, conversation_id: int, type:str,content: st
         logger.error(f"插入消息失败: {e}", exc_info=True)
         return None
 
+
 @with_async_session
 async def get_messages_by_conversation_id_sql(session, conversation_id: int):
     """
     查询指定会话ID下的所有未删除的消息记录，并按创建时间升序排序。
-    
+
     Args:
         session: 数据库会话，由装饰器自动注入。
         conversation_id: 要查询的会话ID。
-    
+
     Returns:
         一个包含消息信息的字典列表，如果出错则返回空列表。
     """
@@ -701,7 +746,10 @@ async def get_messages_by_conversation_id_sql(session, conversation_id: int):
         # 构建查询，选择指定conversation_id且未被删除的消息
         messages = await session.execute(
             select(MessageModel)
-            .where(MessageModel.conversation_id == conversation_id, MessageModel.is_deleted == 0)
+            .where(
+                MessageModel.conversation_id == conversation_id,
+                MessageModel.is_deleted == 0,
+            )
             .order_by(MessageModel.create_time)  # 按创建时间排序
         )
         # 格式化查询结果
@@ -710,7 +758,7 @@ async def get_messages_by_conversation_id_sql(session, conversation_id: int):
                 "id": msg.id,
                 "type": msg.type,
                 "content": msg.content,
-                "create_time": msg.create_time.strftime('%Y-%m-%d %H:%M:%S')
+                "create_time": msg.create_time.strftime("%Y-%m-%d %H:%M:%S"),
             }
             for msg in messages.scalars().all()
         ]
@@ -718,6 +766,7 @@ async def get_messages_by_conversation_id_sql(session, conversation_id: int):
     except Exception as e:
         logger.error(f"查询会话消息失败: {e}", exc_info=True)
         return []
+
 
 @with_async_session
 async def get_workflow_status_by_patient_id_sql(session, patient_id: int):
@@ -733,19 +782,18 @@ async def get_workflow_status_by_patient_id_sql(session, patient_id: int):
         )
         result = []
         for row in workflows.all():
-            result.append({
-                "stage": row.stage,
-                "status": row.status,
-                "rank": row.rank
-            })
+            result.append({"stage": row.stage, "status": row.status, "rank": row.rank})
         logger.info(f"查询结果: {result}")
         return result
     except Exception as e:
         logger.error(f"查询工作流状态失败: {e}", exc_info=True)
         return []
 
+
 @with_async_session
-async def get_conversation_id_by_patient_and_type_sql(session, patient_id: int, conversation_type: str):
+async def get_conversation_id_by_patient_and_type_sql(
+    session, patient_id: int, conversation_type: str
+):
     """
     根据病人ID和会话类型查找最新的conversation_id。
     """
@@ -755,7 +803,7 @@ async def get_conversation_id_by_patient_and_type_sql(session, patient_id: int, 
             .where(
                 ConversationModel.patient_id == patient_id,
                 ConversationModel.type == conversation_type,
-                ConversationModel.is_deleted == 0
+                ConversationModel.is_deleted == 0,
             )
             .order_by(ConversationModel.create_time.desc())
         )
@@ -766,6 +814,33 @@ async def get_conversation_id_by_patient_and_type_sql(session, patient_id: int, 
     except Exception as e:
         logger.error(f"查找会话ID失败: {e}", exc_info=True)
         return None
+
+
+@with_async_session
+async def get_conversation_id_by_unionid_and_type_sql(
+    session, unionid: str, conversation_type: str
+):
+    """
+    根据用户的unionid和会话类型查找最新的conversation_id。
+    """
+    try:
+        conversation = await session.execute(
+            select(ConversationModel.id)
+            .where(
+                ConversationModel.unionid == unionid,
+                ConversationModel.type == conversation_type,
+                ConversationModel.is_deleted == 0,
+            )
+            .order_by(ConversationModel.create_time.desc())
+        )
+        row = conversation.first()
+        if row:
+            return row.id
+        return None
+    except Exception as e:
+        logger.error(f"查找会话ID失败: {e}", exc_info=True)
+        return None
+
 
 @with_async_session
 async def get_prediction_details_by_patient_id_sql(session, patient_id: int):
@@ -784,33 +859,54 @@ async def get_prediction_details_by_patient_id_sql(session, patient_id: int):
                 PredictionDetailModel.elapsed_time,
                 PredictionDetailModel.error_message,
                 PredictionDetailModel.tool_output,
-                PredictionModel.create_time.label("prediction_create_time")
-            ).join(PredictionModel, PredictionDetailModel.prediction_id == PredictionModel.id)
+                PredictionModel.create_time.label("prediction_create_time"),
+            )
+            .join(
+                PredictionModel,
+                PredictionDetailModel.prediction_id == PredictionModel.id,
+            )
             .where(PredictionDetailModel.patient_id == patient_id)
             .order_by(asc(PredictionDetailModel.rank))
         )
         result = []
         for row in details.all():
             # 将JSON字符串反序列化为字典
-            tool_parameters = json.loads(row.tool_parameters) if row.tool_parameters else None
+            tool_parameters = (
+                json.loads(row.tool_parameters) if row.tool_parameters else None
+            )
             tool_output = json.loads(row.tool_output) if row.tool_output else None
-            
-            result.append({
-                "rank": row.rank,
-                "tool_name": row.tool_name,
-                "tool_parameters": tool_parameters,
-                "status": row.status,
-                "start_time": row.start_time.strftime('%Y-%m-%d %H:%M:%S') if row.start_time else None,
-                "end_time": row.end_time.strftime('%Y-%m-%d %H:%M:%S') if row.end_time else None,
-                "elapsed_time": row.elapsed_time,
-                "error_message": row.error_message,
-                "tool_output": tool_output,
-                "prediction_create_time": row.prediction_create_time.strftime('%Y-%m-%d %H:%M:%S') if row.prediction_create_time else None
-            })
+
+            result.append(
+                {
+                    "rank": row.rank,
+                    "tool_name": row.tool_name,
+                    "tool_parameters": tool_parameters,
+                    "status": row.status,
+                    "start_time": (
+                        row.start_time.strftime("%Y-%m-%d %H:%M:%S")
+                        if row.start_time
+                        else None
+                    ),
+                    "end_time": (
+                        row.end_time.strftime("%Y-%m-%d %H:%M:%S")
+                        if row.end_time
+                        else None
+                    ),
+                    "elapsed_time": row.elapsed_time,
+                    "error_message": row.error_message,
+                    "tool_output": tool_output,
+                    "prediction_create_time": (
+                        row.prediction_create_time.strftime("%Y-%m-%d %H:%M:%S")
+                        if row.prediction_create_time
+                        else None
+                    ),
+                }
+            )
         return result
     except Exception as e:
         logger.error(f"查询PredictionDetailModel失败: {e}", exc_info=True)
         return []
+
 
 @with_async_session
 async def get_prediction_groups_by_patient_id_sql(session, patient_id: int):
@@ -839,38 +935,62 @@ async def get_prediction_groups_by_patient_id_sql(session, patient_id: int):
                     PredictionDetailModel.elapsed_time,
                     PredictionDetailModel.error_message,
                     PredictionDetailModel.tool_output,
-                    PredictionDetailModel.flag
-                ).where(PredictionDetailModel.prediction_id == pred.id)
+                    PredictionDetailModel.flag,
+                )
+                .where(PredictionDetailModel.prediction_id == pred.id)
                 .order_by(asc(PredictionDetailModel.rank))
             )
             details = []
             for row in details_query.all():
                 # 将JSON字符串反序列化为字典
-                tool_parameters = json.loads(row.tool_parameters) if row.tool_parameters else None
+                tool_parameters = (
+                    json.loads(row.tool_parameters) if row.tool_parameters else None
+                )
                 tool_output = json.loads(row.tool_output) if row.tool_output else None
-                
-                details.append({
-                    "rank": row.rank,
-                    "tool_name": row.tool_name,
-                    "tool_parameters": tool_parameters,
-                    "status": row.status,
-                    "start_time": row.start_time.strftime('%Y-%m-%d %H:%M:%S') if row.start_time else None,
-                    "end_time": row.end_time.strftime('%Y-%m-%d %H:%M:%S') if row.end_time else None,
-                    "elapsed_time": row.elapsed_time,
-                    "error_message": row.error_message,
-                    "tool_output": tool_output,
-                    "flag": row.flag,
-                    "prediction_create_time": pred.create_time.strftime('%Y-%m-%d %H:%M:%S') if pred.create_time else None
-                })
-            result.append({
-                "prediction_id": pred.id,
-                "create_time": pred.create_time.strftime('%Y-%m-%d %H:%M:%S') if pred.create_time else None,
-                "prediction_details": details
-            })
+
+                details.append(
+                    {
+                        "rank": row.rank,
+                        "tool_name": row.tool_name,
+                        "tool_parameters": tool_parameters,
+                        "status": row.status,
+                        "start_time": (
+                            row.start_time.strftime("%Y-%m-%d %H:%M:%S")
+                            if row.start_time
+                            else None
+                        ),
+                        "end_time": (
+                            row.end_time.strftime("%Y-%m-%d %H:%M:%S")
+                            if row.end_time
+                            else None
+                        ),
+                        "elapsed_time": row.elapsed_time,
+                        "error_message": row.error_message,
+                        "tool_output": tool_output,
+                        "flag": row.flag,
+                        "prediction_create_time": (
+                            pred.create_time.strftime("%Y-%m-%d %H:%M:%S")
+                            if pred.create_time
+                            else None
+                        ),
+                    }
+                )
+            result.append(
+                {
+                    "prediction_id": pred.id,
+                    "create_time": (
+                        pred.create_time.strftime("%Y-%m-%d %H:%M:%S")
+                        if pred.create_time
+                        else None
+                    ),
+                    "prediction_details": details,
+                }
+            )
         return result
     except Exception as e:
         logger.error(f"查询PredictionGroup失败: {e}", exc_info=True)
         return []
+
 
 @with_async_session
 async def handle_tool_input_output_sql(session, request):
@@ -887,25 +1007,34 @@ async def handle_tool_input_output_sql(session, request):
         # 验证病人和预测是否存在
         patient = await session.get(PatientModel, request.patient_id)
         if not patient:
-            return ToolInputOutputResponse(ok=1, failed="病人不存在", predict_detail_id=None)
-        
+            return ToolInputOutputResponse(
+                ok=1, failed="病人不存在", predict_detail_id=None
+            )
+
         prediction = await session.get(PredictionModel, request.prediction_id)
         if not prediction:
-            return ToolInputOutputResponse(ok=1, failed="预测记录不存在", predict_detail_id=None)
-        
+            return ToolInputOutputResponse(
+                ok=1, failed="预测记录不存在", predict_detail_id=None
+            )
+
         # 验证预测是否属于该病人
         if prediction.patient_id != request.patient_id:
-            return ToolInputOutputResponse(ok=1, failed="预测记录不属于该病人", predict_detail_id=None)
-        
+            return ToolInputOutputResponse(
+                ok=1, failed="预测记录不属于该病人", predict_detail_id=None
+            )
+
         # 将字典序列化为JSON字符串，保持键的顺序
-        parameters_json = json.dumps(request.parameters, ensure_ascii=False, separators=(',', ':'))
-        
+        parameters_json = json.dumps(
+            request.parameters, ensure_ascii=False, separators=(",", ":")
+        )
+
         # 根据mode判断是输入还是输出
         if request.mode == 0:  # 工具输入参数
             # 获取当前最大rank
             max_rank_result = await session.execute(
-                select(func.max(PredictionDetailModel.rank))
-                .where(PredictionDetailModel.prediction_id == request.prediction_id)
+                select(func.max(PredictionDetailModel.rank)).where(
+                    PredictionDetailModel.prediction_id == request.prediction_id
+                )
             )
             max_rank = max_rank_result.scalar() or 0
             new_rank = max_rank + 1
@@ -918,59 +1047,68 @@ async def handle_tool_input_output_sql(session, request):
                 tool_name=request.tool_name,
                 tool_parameters=parameters_json,  # 存储JSON字符串
                 tool_output=None,
-                status='pending',
+                status="pending",
                 start_time=datetime.now(),
                 end_time=None,
                 elapsed_time=None,
                 error_message=None,
-                flag=request.flag
+                flag=request.flag,
             )
             session.add(new_detail)
             await session.commit()
             await session.refresh(new_detail)
             predict_detail_id = new_detail.id
-                
+
         elif request.mode == 1:  # 工具输出结果
             # 查找对应的工具记录（按start_time降序，取最新的）
             detail = await session.execute(
                 select(PredictionDetailModel)
                 .where(
                     PredictionDetailModel.prediction_id == request.prediction_id,
-                    PredictionDetailModel.tool_name == request.tool_name
+                    PredictionDetailModel.tool_name == request.tool_name,
                 )
                 .order_by(PredictionDetailModel.start_time.desc())
             )
             detail = detail.scalar_one_or_none()
-            
+
             if not detail:
-                return ToolInputOutputResponse(ok=1, failed="未找到对应的工具记录", predict_detail_id=None)
-            
+                return ToolInputOutputResponse(
+                    ok=1, failed="未找到对应的工具记录", predict_detail_id=None
+                )
+
             # 更新输出结果
             detail.tool_output = parameters_json  # 存储JSON字符串
-            detail.status = 'completed'
+            detail.status = "completed"
             detail.end_time = datetime.now()
             detail.flag = request.flag  # 更新flag值
             if detail.start_time:
-                detail.elapsed_time = int((detail.end_time - detail.start_time).total_seconds())
+                detail.elapsed_time = int(
+                    (detail.end_time - detail.start_time).total_seconds()
+                )
             await session.commit()
             predict_detail_id = detail.id
 
         else:
-            return ToolInputOutputResponse(ok=1, failed="无效的mode值", predict_detail_id=None)
-        
-        return ToolInputOutputResponse(ok=0, failed="", predict_detail_id=predict_detail_id)
-        
+            return ToolInputOutputResponse(
+                ok=1, failed="无效的mode值", predict_detail_id=None
+            )
+
+        return ToolInputOutputResponse(
+            ok=0, failed="", predict_detail_id=predict_detail_id
+        )
+
     except Exception as e:
         await session.rollback()
         logger.error(f"处理工具输入输出失败: {e}", exc_info=True)
         return ToolInputOutputResponse(ok=1, failed=str(e), predict_detail_id=None)
+
 
 @with_async_session
 async def handle_ai_message_sql(session, request: HandleAIMessageRequest):
     """
     处理AI消息：如果最新消息不是assistant则新建，否则追加内容。
     简化版本：只基于消息类型判断，使用ID排序确保稳定性。
-    
+
     Args:
         session: 数据库会话
         request: HandleAIMessageRequest
@@ -981,48 +1119,64 @@ async def handle_ai_message_sql(session, request: HandleAIMessageRequest):
         # 使用ID排序而不是时间排序，更稳定
         messages = await session.execute(
             select(MessageModel)
-            .where(MessageModel.conversation_id == request.conversation_id, MessageModel.is_deleted == 0)
+            .where(
+                MessageModel.conversation_id == request.conversation_id,
+                MessageModel.is_deleted == 0,
+            )
             .order_by(MessageModel.id.desc())
         )
         latest_msg = messages.scalars().first()
-        
+
         # 如果没有消息或最新消息不是assistant类型，创建新消息
-        if not latest_msg or latest_msg.type != 'assistant':
-            logger.info(f"创建新的assistant消息，conversation_id: {request.conversation_id}")
+        if not latest_msg or latest_msg.type != "assistant":
+            logger.info(
+                f"创建新的assistant消息，conversation_id: {request.conversation_id}"
+            )
             # 新建assistant类型消息
             new_message = MessageModel(
                 conversation_id=request.conversation_id,
-                type='assistant',
+                type="assistant",
                 content=request.ai_message or "",
-                is_deleted=0
+                is_deleted=0,
             )
             session.add(new_message)
             await session.commit()
             await session.refresh(new_message)
-            return HandleAIMessageResponse(ok=0, failed="", message_id=new_message.id, content=new_message.content)
-        
+            return HandleAIMessageResponse(
+                ok=0, failed="", message_id=new_message.id, content=new_message.content
+            )
+
         # 最新消息是assistant类型，进行合并
         current_content = latest_msg.content or ""
         new_content = request.ai_message or ""
-        
+
         # 如果当前内容为空，直接设置新内容
         if not current_content:
-            logger.info(f"当前消息内容为空，直接设置新内容，message_id: {latest_msg.id}")
+            logger.info(
+                f"当前消息内容为空，直接设置新内容，message_id: {latest_msg.id}"
+            )
             latest_msg.content = new_content
             await session.commit()
-            return HandleAIMessageResponse(ok=0, failed="", message_id=latest_msg.id, content=new_content)
-        
+            return HandleAIMessageResponse(
+                ok=0, failed="", message_id=latest_msg.id, content=new_content
+            )
+
         # 合并内容
         logger.info(f"合并消息内容，message_id: {latest_msg.id}")
         merged_content = current_content + new_content
         latest_msg.content = merged_content
         await session.commit()
-        return HandleAIMessageResponse(ok=0, failed="", message_id=latest_msg.id, content=merged_content)
-        
+        return HandleAIMessageResponse(
+            ok=0, failed="", message_id=latest_msg.id, content=merged_content
+        )
+
     except Exception as e:
         await session.rollback()
         logger.error(f"处理AI消息失败: {e}", exc_info=True)
-        return HandleAIMessageResponse(ok=1, failed=str(e), message_id=None, content=None)
+        return HandleAIMessageResponse(
+            ok=1, failed=str(e), message_id=None, content=None
+        )
+
 
 @with_async_session
 async def get_project_detail_by_id_sql(session, project_id: int):
@@ -1034,30 +1188,39 @@ async def get_project_detail_by_id_sql(session, project_id: int):
         if not project:
             return None
         return {
-            'name': project.name,
-            'created_at': project.created_at.strftime('%Y-%m-%d %H:%M:%S') if project.created_at else '',
-            'updated_at': project.updated_at.strftime('%Y-%m-%d %H:%M:%S') if project.updated_at else '',
-            'project_code': project.project_code,
-            'short_name': project.short_name,
-            'description': project.description,
-            'project_type': project.project_type,
-            'indication': project.indication,
-            'study_phase': project.study_phase,
-            'is_multicenter': project.is_multicenter,
-            'registration_number': project.registration_number,
-            'registration_platform_url': project.registration_platform_url,
-            'principal_investigator': project.principal_investigator,
-            'pi_email': project.pi_email,
-            'doctor_enrollment_count': project.doctor_enrollment_count,
-            'patient_enrollment_count': project.patient_enrollment_count,
-            'hospital': project.hospital,
-            'phone': project.phone,
-            'status': project.status,
-            'enrollment_criteria': project.enrollment_criteria
+            "name": project.name,
+            "created_at": (
+                project.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                if project.created_at
+                else ""
+            ),
+            "updated_at": (
+                project.updated_at.strftime("%Y-%m-%d %H:%M:%S")
+                if project.updated_at
+                else ""
+            ),
+            "project_code": project.project_code,
+            "short_name": project.short_name,
+            "description": project.description,
+            "project_type": project.project_type,
+            "indication": project.indication,
+            "study_phase": project.study_phase,
+            "is_multicenter": project.is_multicenter,
+            "registration_number": project.registration_number,
+            "registration_platform_url": project.registration_platform_url,
+            "principal_investigator": project.principal_investigator,
+            "pi_email": project.pi_email,
+            "doctor_enrollment_count": project.doctor_enrollment_count,
+            "patient_enrollment_count": project.patient_enrollment_count,
+            "hospital": project.hospital,
+            "phone": project.phone,
+            "status": project.status,
+            "enrollment_criteria": project.enrollment_criteria,
         }
     except Exception as e:
         logger.error(f"查询项目详情失败: {e}", exc_info=True)
         return None
+
 
 @with_async_session
 async def get_project_stage_stats_sql(session, project_id: int):
@@ -1083,8 +1246,8 @@ async def get_project_stage_stats_sql(session, project_id: int):
                 workflow = await session.execute(
                     select(WorkflowModel).where(
                         WorkflowModel.patient_id == pid,
-                        WorkflowModel.stage == '测序数据',
-                        WorkflowModel.status == 'completed'
+                        WorkflowModel.stage == "测序数据",
+                        WorkflowModel.status == "completed",
                     )
                 )
                 if workflow.scalars().first():
@@ -1093,27 +1256,25 @@ async def get_project_stage_stats_sql(session, project_id: int):
             "patient_info": {
                 "coverage": {
                     "numerator": patient_count,
-                    "denominator": patient_enrollment_count
+                    "denominator": patient_enrollment_count,
                 },
-                "progress": {
-                    "numerator": patient_count,
-                    "denominator": patient_count
-                }
+                "progress": {"numerator": patient_count, "denominator": patient_count},
             },
             "sequencing_data": {
                 "coverage": {
                     "numerator": patient_count,
-                    "denominator": patient_enrollment_count
+                    "denominator": patient_enrollment_count,
                 },
                 "progress": {
                     "numerator": seq_completed_count if patient_count > 0 else 0,
-                    "denominator": patient_count
-                }
-            }
+                    "denominator": patient_count,
+                },
+            },
         }
     except Exception as e:
         logger.error(f"统计项目阶段进展失败: {e}", exc_info=True)
         return None
+
 
 @with_async_session
 async def get_task_queue_status_sql(session, conversation_id: int):
@@ -1122,30 +1283,35 @@ async def get_task_queue_status_sql(session, conversation_id: int):
     """
     # 1. 查找该conversation_id下id最大（最新）的一条记录
     latest_task = await session.execute(
-        select(TaskQueueModel).where(TaskQueueModel.conversation_id == conversation_id).order_by(TaskQueueModel.id.desc()).limit(1)
+        select(TaskQueueModel)
+        .where(TaskQueueModel.conversation_id == conversation_id)
+        .order_by(TaskQueueModel.id.desc())
+        .limit(1)
     )
     task = latest_task.scalars().first()
     if not task:
         return []
     now = datetime.now()
-    if task.status == 'running':
+    if task.status == "running":
         queue_position = 0
         elapsed = (now - task.started_at).total_seconds() if task.started_at else 0.0
         wait_time = task.estimated_time - elapsed
         wait_time = max(wait_time, 0.0)
-    elif task.status == 'queued':
+    elif task.status == "queued":
         prev_tasks = await session.execute(
-            select(TaskQueueModel).where(
+            select(TaskQueueModel)
+            .where(
                 TaskQueueModel.id < task.id,
-                TaskQueueModel.status.in_(['queued', 'running'])
-            ).order_by(TaskQueueModel.id)
+                TaskQueueModel.status.in_(["queued", "running"]),
+            )
+            .order_by(TaskQueueModel.id)
         )
         prev_tasks = prev_tasks.scalars().all()
         wait_time = 0.0
         for t in prev_tasks:
-            if t.status == 'queued':
+            if t.status == "queued":
                 wait_time += t.estimated_time
-            elif t.status == 'running':
+            elif t.status == "running":
                 if t.started_at:
                     remain = t.estimated_time - (now - t.started_at).total_seconds()
                     wait_time += max(remain, 0.0)
@@ -1153,23 +1319,32 @@ async def get_task_queue_status_sql(session, conversation_id: int):
                     wait_time += t.estimated_time
         wait_time += task.estimated_time
         queue_position = len(prev_tasks)
-    elif task.status == 'completed':
+    elif task.status == "completed":
         queue_position = 0
         wait_time = 0.0
     else:
         queue_position = 0
         wait_time = 0.0
-    result = [{
-        "task_id": task.id,
-        "celery_task_id": task.celery_task_id,
-        "status": task.status,
-        "queue_position": queue_position,
-        "wait_time": int(round(wait_time))
-    }]
+    result = [
+        {
+            "task_id": task.id,
+            "celery_task_id": task.celery_task_id,
+            "status": task.status,
+            "queue_position": queue_position,
+            "wait_time": int(round(wait_time)),
+        }
+    ]
     return result
 
+
 @with_async_session
-async def insert_task_queue_record(session, patient_id: int, conversation_id: int, unique_peptide_count: int = None, sliding_window_length: str = None):
+async def insert_task_queue_record(
+    session,
+    patient_id: int,
+    conversation_id: int,
+    unique_peptide_count: int = None,
+    sliding_window_length: str = None,
+):
     """
     先插入task_queue记录，celery_task_id 为空，返回主键id。
     新增 unique_peptide_count（滑窗去重后肽段数）和 sliding_window_length（滑窗长度）字段。
@@ -1178,10 +1353,10 @@ async def insert_task_queue_record(session, patient_id: int, conversation_id: in
         celery_task_id=None,
         patient_id=patient_id,
         conversation_id=conversation_id,
-        estimated_time=unique_peptide_count*0.07,
-        status='queued',
+        estimated_time=unique_peptide_count * 0.07,
+        status="queued",
         unique_peptide_count=unique_peptide_count,
-        sliding_window_length=sliding_window_length
+        sliding_window_length=sliding_window_length,
     )
     session.add(task)
     try:
@@ -1191,6 +1366,7 @@ async def insert_task_queue_record(session, patient_id: int, conversation_id: in
     except IntegrityError:
         await session.rollback()
         return None  # 已有记录，忽略即可
+
 
 @with_async_session
 async def delete_patient_file_sql(session, patient_id: int, file_path: str):
@@ -1215,18 +1391,467 @@ async def delete_patient_file_sql(session, patient_id: int, file_path: str):
         await session.rollback()
         return False, str(e)
 
+
 @with_async_session
 async def has_predict_neo_antigen_conversation_sql(session, patient_id: int):
     """
     判断该病人是否有类型为predict_neo_antigen的会话
     """
     result = await session.execute(
-        select(ConversationModel.id)
-        .where(
+        select(ConversationModel.id).where(
             ConversationModel.patient_id == patient_id,
             ConversationModel.type == "predict_neo_antigen",
-            ConversationModel.is_deleted == 0
+            ConversationModel.is_deleted == 0,
         )
     )
     return result.first() is not None
 
+
+@with_async_session
+async def process_messages(
+    session,
+    conversation_id: int,
+    ai_messages: List[Dict],
+    tool_messages: List[Dict],
+    tool_result_analysis_list: list,
+    msg_response: str,
+    tool_middle_result: str,
+):
+    # 创建 message 表的 content 字段
+    try:
+        msg = MessageModel(
+            conversation_id=conversation_id,
+            type="assistant",
+            content=msg_response,
+            meta_data=None,
+            feedback_like=None,
+            feedback_dislike=None,
+            is_deleted=0,
+            create_time=datetime.now(),
+        )
+        # 添加到数据库会话
+        session.add(msg)
+        # 提交到数据库
+        await session.commit()
+        # 刷新以获取数据库分配的 ID 等字段
+        await session.refresh(msg)
+        return msg.id
+    except Exception as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=str(e))
+
+
+# chat路由插入单一会话内部-用户输入sql
+@with_async_session
+async def insert_user_input_chat(session, conversation_id: int, query: str):
+    try:
+        msg = MessageModel(
+            conversation_id=conversation_id,
+            type="user",
+            content=query,
+            meta_data=None,
+            feedback_like=None,
+            feedback_dislike=None,
+            is_deleted=0,
+            create_time=datetime.now(),
+        )
+        # 添加到数据库会话
+        session.add(msg)
+        # 提交到数据库
+        await session.commit()
+        # 刷新以获取数据库分配的 ID 等字段
+        await session.refresh(msg)
+        return msg.id
+    except Exception as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=str(e))
+
+
+# 删除单一会话sql
+async def delete_specific_session_sql(
+    session: AsyncSession, request: DeleteSessionRequest, unionid: str
+):
+    """
+    删除特定会话
+    :param session: 异步数据库会话
+    :param request: 删除会话的请求模型
+    :return: BaseResponse
+    """
+
+    async with session.begin():
+        # 检查是否存在指定的会话，并且会话属于当前用户
+        result = await session.execute(
+            select(ConversationModel)
+            .where(ConversationModel.id == request.conversation_id)
+            .where(ConversationModel.unionid == unionid)
+        )
+        conversation = result.scalar_one_or_none()
+
+        if not conversation:
+            # 如果会话不存在或不属于当前用户，返回404错误
+            return BaseResponse(
+                ok=1, failed="Conversation not found or does not belong to the user"
+            )
+
+    try:
+        # 将与会话关联的所有消息标记为已删除
+        await session.execute(
+            update(MessageModel)
+            .where(MessageModel.conversation_id == request.conversation_id)
+            .values(is_deleted=1)
+        )
+
+        try:
+            response = await remote_delete_agent_state(request.conversation_id)
+            if response.get("status") != "success":
+                await session.rollback()
+                return BaseResponse(
+                    ok=1,
+                    failed=f"远程状态清理失败：{response.get('message', '未知错误')}",
+                )
+        except httpx.RequestError as e:
+            await session.rollback()
+            return BaseResponse(ok=1, failed=f"远程调用网络错误：{str(e)}")
+        except Exception as e:
+            await session.rollback()
+            return BaseResponse(ok=1, failed=f"远程调用未知错误：{str(e)}")
+
+        # 将会话标记为已删除
+        await session.execute(
+            update(ConversationModel)
+            .where(ConversationModel.id == request.conversation_id)
+            .values(is_deleted=1)
+        )
+
+        # 提交事务
+        await session.commit()
+        return BaseResponse(ok=0, failed="")
+    except Exception as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=str(e))
+
+
+# 清空所有会话sql
+async def delete_sessions_sql(session: AsyncSession, unionid: str):
+    try:
+        async with session.begin():
+            # 查询该用户的所有会话 ID
+            result = await session.execute(
+                select(ConversationModel.id).where(
+                    ConversationModel.unionid == unionid,
+                    ConversationModel.type == "qa_predict_neo",
+                    ConversationModel.is_deleted == 0,
+                )
+            )
+            session_ids = result.scalars().all()
+
+            if not session_ids:
+                # 如果该用户没有会话，直接返回成功
+                return BaseResponse(ok=0, failed="")
+            for sid in session_ids:
+                try:
+                    response = await remote_delete_agent_state(sid)
+                    if response.get("status") != "success":
+                        await session.rollback()
+                        return BaseResponse(
+                            ok=1,
+                            failed=f"远程状态清理失败：{response.get('message', '未知错误')} (thread_id={sid})",
+                        )
+                except httpx.RequestError as e:
+                    await session.rollback()
+                    return BaseResponse(
+                        ok=1, failed=f"远程调用网络错误：{str(e)} (thread_id={sid})"
+                    )
+                except Exception as e:
+                    await session.rollback()
+                    return BaseResponse(
+                        ok=1, failed=f"远程调用未知错误：{str(e)} (thread_id={sid})"
+                    )
+
+            # 将所有会话关联的消息标记为已删除
+            await session.execute(
+                update(MessageModel)
+                .where(MessageModel.conversation_id.in_(session_ids))
+                .values(is_deleted=1)
+            )
+
+            # 将所有会话标记为已删除
+            await session.execute(
+                update(ConversationModel)
+                .where(
+                    ConversationModel.unionid == unionid,
+                    ConversationModel.type == "qa_predict_neo",
+                    ConversationModel.is_deleted == 0,
+                )
+                .values(is_deleted=1)
+            )
+
+        return BaseResponse(ok=0, failed="")
+    except Exception as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=str(e))
+
+
+# 查询单一会话历史sql
+async def search_specific_session_sql(
+    session: AsyncSession, request: QuerySingleSessionRequest
+):
+    """
+    查询单一会话历史的逻辑
+    """
+    try:
+        # 查询Conversation以获取session_title并验证会话存在性和权限
+        conversation_query = select(ConversationModel).where(
+            ConversationModel.id == request.conversation_id
+        )
+        conversation_result = await session.execute(conversation_query)
+        conversation = conversation_result.scalars().first()
+
+        if conversation is None:
+            return {"ok": 1, "failed": "Session not found"}
+        # 查询会话历史消息
+        message_query = (
+            select(MessageModel)
+            .where(
+                MessageModel.conversation_id == request.conversation_id,
+                MessageModel.is_deleted == 0,  # 关键修改：过滤已删除消息
+            )
+            .order_by(desc(MessageModel.create_time))
+        )
+        message_result = await session.execute(message_query)
+        message_data = message_result.scalars().unique().all()
+
+        # 构建带信息的响应
+        chats = []
+        for message in message_data:
+
+            chats.append(
+                ChatItem(
+                    id=message.id,
+                    type=message.type,
+                    content=message.content,
+                    create_time=message.create_time.strftime("%Y-%m-%d %H:%M:%S"),
+                )
+            )
+
+        return QuerySessionResponse(
+            ok=0,
+            failed="",
+            conversation_id=request.conversation_id,
+            session_title=conversation.title,
+            chat_type=conversation.type,
+            chats=chats,
+        )
+
+    except Exception as e:
+        return QuerySessionResponse(
+            ok=1,
+            failed=str(e),
+            conversation_id=request.conversation_id,
+            session_title="",
+            chat_type=conversation.type,
+            chats=[],
+        )
+
+
+# 查询会话历史sql
+async def search_sessions_sql(session: AsyncSession, unionid: str):
+    # 查询会话列表的逻辑
+    try:
+        # 查询该用户的所有会话记录
+        result = await session.execute(
+            select(ConversationModel)
+            .where(
+                ConversationModel.unionid == unionid,
+                ConversationModel.is_deleted == 0,
+                ConversationModel.type == "qa_predict_neo",
+            )
+            .order_by(desc(ConversationModel.updated_time))
+        )
+        session_data = result.scalars().all()
+        # 判断 session_data 是否为空
+        if not session_data:
+            return QuerySessionsResponse(ok=1, failed="会话记录为空", sessions=[])
+
+        # 构建会话列表
+        sessions = []
+
+        for record in session_data:
+            # 格式化时间为 YYYY-MM-DD HH:MM:SS
+            formatted_update_time = record.updated_time.strftime("%Y-%m-%d %H:%M:%S")
+            formatted_create_time = record.create_time.strftime("%Y-%m-%d %H:%M:%S")
+            sessions.append(
+                SessionItem(
+                    conversation_id=record.id,
+                    session_title=record.title,
+                    update_time=formatted_update_time,
+                    create_time=formatted_create_time,
+                    chat_type=record.type,
+                )
+            )
+
+        return QuerySessionsResponse(ok=0, failed="", sessions=sessions)
+    except Exception as e:
+        return QuerySessionsResponse(ok=1, failed=str(e), sessions=[])
+
+
+# 新建会话记录sql
+async def add_sessions_sql(
+    session: AsyncSession, request: AddSessionRequest, unionid: str
+):
+    try:
+        msg = ConversationModel(
+            unionid=unionid,
+            title=request.session_title,
+            type=request.chat_type,
+            updated_time=datetime.now(),
+            create_time=datetime.now(),
+        )
+        # 添加到数据库会话
+        session.add(msg)
+        # 提交到数据库
+        await session.commit()
+        # 刷新以获取数据库分配的 ID 等字段
+        await session.refresh(msg)
+        return SessionResponse(ok=0, failed="", conversation_id=msg.id)
+    except Exception as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=str(e))
+
+
+# 返回会话id
+async def get_new_session_id_sql(
+    unionid: str,
+):
+    if unionid is None:
+        return {"ok": 1, "failed": "unionid不存在"}
+    try:
+        id = str(uuid.uuid4())
+        return SessionResponse(ok=0, failed="", conversation_id=id)
+    except Exception as e:
+        return BaseResponse(ok=1, failed=str(e))
+
+
+async def update_session_name_sql(
+    session: AsyncSession,
+    request: UpdateSessionRequest,
+    unionid: str,
+):
+    try:
+        # 检查会话是否存在且属于当前用户
+        result = await session.execute(
+            select(ConversationModel)
+            .where(ConversationModel.id == request.conversation_id)
+            .where(ConversationModel.unionid == unionid)
+            .where(ConversationModel.is_deleted == 0)
+        )
+        conversation = result.scalar_one_or_none()
+
+        if not conversation:
+            # 如果会话不存在或不属于当前用户，返回错误
+            return BaseResponse(ok=1, failed="会话不存在或不属于当前用户")
+
+        # 直接通过对象修改会话名称
+        conversation.title = request.session_title
+
+        # 提交事务
+        await session.commit()
+
+        return BaseResponse(ok=0, failed="")
+    except Exception as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=str(e))
+
+
+# 初始化demo聊天区
+async def reset_conversation_sql(
+    session: AsyncSession, request: ResetConversationRequest, unionid: str
+):
+    try:
+        # 检查会话是否存在且属于当前用户
+        result = await session.execute(
+            select(ConversationModel)
+            .where(ConversationModel.id == request.conversation_id)
+            .where(ConversationModel.unionid == unionid)
+        )
+        conversation = result.scalar_one_or_none()
+
+        if not conversation:
+            return BaseResponse(
+                ok=1, failed="Conversation not found or does not belong to the user"
+            )
+        # 删除所有消息
+        await session.execute(
+            update(MessageModel)
+            .where(MessageModel.conversation_id == request.conversation_id)
+            .values(is_deleted=1)  # 假设 1 表示已删除
+        )
+        try:
+            response = await remote_delete_agent_state(request.conversation_id)
+            if response.get("status") != "success":
+                await session.rollback()
+                return BaseResponse(
+                    ok=1,
+                    failed=f"远程状态清理失败：{response.get('message', '未知错误')}",
+                )
+        except httpx.RequestError as e:
+            await session.rollback()
+            return BaseResponse(ok=1, failed=f"远程调用网络错误：{str(e)}")
+        except Exception as e:
+            await session.rollback()
+            return BaseResponse(ok=1, failed=f"远程调用未知错误：{str(e)}")
+
+        # 提交事务
+        await session.commit()
+        return BaseResponse(ok=0, failed="")
+
+    except SQLAlchemyError as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=f"数据库错误: {e}")
+    except Exception as e:
+        await session.rollback()
+        return BaseResponse(ok=1, failed=f"系统错误: {e}")
+
+
+@with_async_session
+async def insert_patient_file_sql(
+    session,
+    patient_id: int,
+    unionid: str,
+    file_name: str,
+    file_type: str,
+    file_size: int,
+    file_path: str,
+    file_hash: str,
+    file_desc: str,
+    file_source: str = "0",
+):
+    uploaded_file = FileModel(
+        patient_id=patient_id,
+        upload_by=unionid,
+        file_name=file_name,
+        file_type=file_type,
+        file_size=file_size,
+        file_path=file_path,
+        file_hash=file_hash,
+        file_status=True,
+        file_source=file_source,
+        file_desc=file_desc,
+        is_deleted=False,
+    )
+    session.add(uploaded_file)
+    await session.commit()
+    await session.refresh(uploaded_file)
+    return uploaded_file
+
+
+@with_async_session
+async def update_conversation_title_and_time(session, conversation_id: int, prompt: str):
+    conversation = await session.get(ConversationModel, int(conversation_id))
+    if conversation:
+        if conversation.title == "新会话":
+            conversation.title = prompt[:64]
+        conversation.updated_time = datetime.now()
+        session.add(conversation)
+        await session.commit()
+        await session.refresh(conversation)

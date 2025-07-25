@@ -24,6 +24,7 @@ class PatientModel(Base):
     HLA_type = Column(String(255))  # HLA分型结果
     CDR_type = Column(String(255))  # CDR(互补决定区)数据
     treatment_state = Column(String(64))  # 治疗阶段状态
+    medical_history = Column(Text, nullable=True, comment='病人病历')
     additional_info = Column(Text)  # 附加信息/备注
     clinical_medication = Column(Text)  # 临床用药记录
     clinical_diagnosis = Column(Text)  # 临床诊断信息

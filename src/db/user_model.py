@@ -27,4 +27,5 @@ class UserModel(Base):
     files = relationship('FileModel', back_populates='uploader', cascade='all, delete-orphan')
     workflows_started = relationship('WorkflowModel', foreign_keys='WorkflowModel.started_by', back_populates='starter')
     workflows_completed = relationship('WorkflowModel', foreign_keys='WorkflowModel.completed_by', back_populates='completer')
-    project_members = relationship('ProjectMemberModel', back_populates='user', cascade='all, delete-orphan') 
+    project_members = relationship('ProjectMemberModel', back_populates='user', cascade='all, delete-orphan')
+    conversations = relationship('ConversationModel', back_populates='user', cascade='all, delete-orphan')
