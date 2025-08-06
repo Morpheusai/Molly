@@ -26,6 +26,7 @@
     },
 
     "time":{
-        "agent_http_timeout": 21600
+        "agent_http_timeout": 21600,
+        "celery_task_timeout": 21600
     }
 }

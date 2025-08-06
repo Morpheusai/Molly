@@ -281,7 +281,7 @@ class PatientBriefInfo(BaseModel):
 class PatientBriefListResponse(BaseResponse):
     data: Optional[List[PatientBriefInfo]] = None
 
-# 病人详细信息的数据结构（不含id/source_id/created_at等字段）
+# 病人详细信息的数据结构（包含项目信息和创建时间）
 class PatientDetailInfo(BaseModel):
     medical_record_number: str  # 病历号
     name: str                  # 患者姓名
@@ -300,7 +300,14 @@ class PatientDetailInfo(BaseModel):
     clinical_diagnosis: str | None = None   # 临床诊断
     medical_history: str | None = None   # 病人病历
     status: str                # 病历状态
+    created_at: str | None = None  # 创建时间
     updated_at: str | None = None  # 更新时间
+    # 项目信息
+    project_name: str | None = None  # 项目名称
+    principal_investigator: str | None = None  # 项目负责人
+    study_phase: str | None = None  # 研究分期
+    qa_str: str | None = None  # 项目编号_病历号拼接
+    copilot_flag: int = -1  # copilot标志：0表示有predict_neo_antigen会话，-1表示没有
 
 # 获取病人详细信息的接口响应结构
 class PatientDetailResponse(BaseResponse):
@@ -356,13 +363,15 @@ class PatientInfoResponse(BaseResponse):
 
 class FileInfo(BaseModel):
     """
-    单个文件信息，包含文件名、路径、类型和描述
+    单个文件信息，包含文件名、路径、类型、描述、来源、创建时间和大小
     """
     file_name: str  # 文件名
     file_path: str  # 文件路径
     file_type: str  # 文件类型
     file_desc: str  # 文件描述
     file_source: str  # 文件来源
+    file_size: int  # 文件大小（字节）
+    created_at: str  # 文件创建时间（字符串格式）
 
 class PatientFilesResponse(BaseResponse):
     """
@@ -718,6 +727,7 @@ class PatientFullInfo(BaseModel):
     created_by: str  # 创建者unionid
     created_at: str | None = None  # 创建时间
     updated_at: str | None = None  # 更新时间
+    copilot_flag: int = -1  # copilot标志：0表示有predict_neo_antigen会话，-1表示没有
 
 # 病人完整信息列表响应模型，data为PatientFullInfo列表
 class PatientFullListResponse(BaseResponse):
@@ -837,3 +847,29 @@ class ExcelToDictListRequest(BaseModel):
 
 class ExcelToDictListResponse(BaseResponse):
     excel_data: list = Field(default=[], description="Excel转为的字典列表")
+
+
+class GetPatientHLAAndFilesRequest(BaseModel):
+    """获取病人HLA分型和特定文件信息的请求模型"""
+    patient_id: int = Field(..., description="病人ID")
+
+
+class PatientFileInfo(BaseModel):
+    """病人特定文件信息模型"""
+    file_name: str = Field(description="文件名")
+    file_path: str = Field(description="文件路径")
+    created_at: str = Field(description="文件创建时间")
+
+
+class PatientHLAAndFilesInfo(BaseModel):
+    """病人HLA分型和文件信息模型"""
+    HLA_type: str | None = Field(None, description="HLA分型")
+    normal_files: List[PatientFileInfo] = Field(default=[], description="正常文件信息列表")
+    tumor_files: List[PatientFileInfo] = Field(default=[], description="肿瘤文件信息列表")
+    mutation_count: int | None = Field(None, description="VCF Excel文件的突变数")
+
+
+class GetPatientHLAAndFilesResponse(BaseResponse):
+    """获取病人HLA分型和特定文件信息的响应模型"""
+    data: PatientHLAAndFilesInfo | None = None
+

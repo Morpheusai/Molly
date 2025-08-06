@@ -137,7 +137,7 @@ async def extract_patient_info_from_file(
                 "file_type": "patient_info_file",
                 "file_path": minio_file_path,
                 "file_hash": file_hash,
-                "file_status": True,
+                "file_status": 1,
                 "file_source": 0,
                 "file_desc": file_desc,
             }
@@ -151,7 +151,6 @@ async def extract_patient_info_from_file(
                 file_status=file_info['file_status'],
                 file_source=file_info['file_source'],
                 file_desc=file_info['file_desc'],
-                is_deleted=False
             )
 
             session.add(uploaded_file)

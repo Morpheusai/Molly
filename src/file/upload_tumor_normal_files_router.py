@@ -8,16 +8,20 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import APIRouter, File, UploadFile, Body, Depends, HTTPException, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.future import select
+from sqlalchemy import func
 
 from src.api.api import upload_tumor_normal_files_api
 from src.api.protocols import BaseResponse
 from src.api.protocols import UploadTumorNormalFilesResponse
 from src.config import g_config
+from src.db.workflows_model import WorkflowModel
+from src.utils.base import get_async_session_local
 from src.utils.jwt_util import decode_vaild
 from src.utils import logger
 from src.utils.minio import upload_file_to_minio, bucket_molly
 from src.utils.utils import get_file_desc
-from src.utils.mysql_db import insert_patient_file_sql
+from src.utils.mysql_db import insert_or_update_patient_file_sql
 
 
 load_dotenv()
@@ -75,7 +79,7 @@ async def upload_tumor_normal_files(
 
         # 处理normal_file（上传并入库，但不影响response）
         normal_info = await get_file_info_and_upload(normal_file, "normal_file")
-        await insert_patient_file_sql(
+        await insert_or_update_patient_file_sql(
             patient_id=patient_id,
             unionid=unionid,
             file_name=normal_info["file_name"],
@@ -87,6 +91,23 @@ async def upload_tumor_normal_files(
         )
         # 处理tumor_file（上传并入库，并用其信息组装response）
         tumor_info = await get_file_info_and_upload(tumor_file, "tumor_file")
+
+        async with get_async_session_local()() as session:
+            # 查找对应stage的工作流记录（测序数据阶段，rank=2）
+            result = await session.execute(
+                select(WorkflowModel)
+                .where(WorkflowModel.patient_id == patient_id)
+                .where(WorkflowModel.stage == '测序数据')
+                .where(WorkflowModel.rank == 2)
+            )
+            workflow = result.scalar_one_or_none()
+            
+            if workflow:
+                workflow.status = 'completed'
+                workflow.completed_at = func.now()
+                await session.commit()
+                logger.info(f"Workflow for patient {patient_id} stage '测序数据' (rank=2) completed")
+
         return await upload_tumor_normal_files_api(
             patient_id=patient_id,
             unionid=unionid,

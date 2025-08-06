@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
 from celery import Celery
-from fastapi import Depends, FastAPI, Request, HTTPException,status
+from fastapi import Depends, FastAPI, Request, HTTPException,status, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -40,6 +40,7 @@ from src.api.api import (
     reset_conversation,
     vcf_file_parse,
     excel_to_dictlist_api,
+    get_patient_hla_and_files,
 )
 from src.api.protocols import (
     UserInput, 
@@ -828,7 +829,7 @@ app.post("/backend/get_project_patients",
          tags=["病人数据"], summary="获取指定项目下的所有病人详细信息")(get_project_patients)
 
 app.post("/backend/get_patient_detail",
-         tags=["病人数据"], summary="获取指定病人详细信息（不含id/source_id/created_at）")(get_patient_detail)
+         tags=["病人数据"], summary="获取指定病人详细信息（包含项目信息和创建时间）")(get_patient_detail)
 
 app.post("/backend/create_project",
          tags=["项目管理"], summary="创建或更新项目")(create_project)
@@ -861,6 +862,9 @@ app.post("/backend/task_queue_status", tags=["任务队列"], summary="获取任
 app.post("/backend/vcf_file_parse", tags=["文件处理"], summary="VCF文件解析")(vcf_file_parse)
 
 app.post("/backend/excel_to_dictlist", tags=["文件处理"], summary="根据minio路径读取excel并返回字典列表")(excel_to_dictlist_api)
+
+app.post("/backend/get_patient_hla_and_files", tags=["病人数据"], summary="获取病人HLA分型和特定文件信息")(get_patient_hla_and_files)
+
 
 app.include_router(download_router, prefix="/backend")
 app.include_router(display_router, prefix="/backend")

@@ -31,7 +31,7 @@ from src.api.protocols import (
     TaskQueueStatusItem,
     DeleteSessionRequest,
     QuerySingleSessionRequest,
-    VcfParseRequest, VcfParseResponse
+    VcfParseRequest, VcfParseResponse,
 )
 from src.config import g_config 
 from src.db import WorkflowModel
@@ -187,7 +187,7 @@ async def get_patient_detail(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> PatientDetailResponse:
     """
-    输入病人id和token，返回该病人的详细信息（去除id、source_id、created_at）
+    输入病人id和token，返回该病人的详细信息（包含项目信息和创建时间）
     """
     try:
         system_token = credentials.credentials
@@ -302,7 +302,9 @@ async def get_patient_files(
             file_path=f["file_path"],
             file_type=f["file_type"],
             file_desc=f["file_desc"],
-            file_source=f["file_source"]
+            file_source=f["file_source"],
+            file_size=f["file_size"],
+            created_at=f["created_at"]
         ) for f in data["files"]]
         return PatientFilesResponse(ok=0, failed="", files=files, total=data["total"])
     except HTTPException as e:
@@ -733,7 +735,7 @@ async def upload_tumor_normal_files_api(
     tumor_file_desc: str,
     normal_file_path: str
 ) -> UploadTumorNormalFilesResponse:
-    inserted_file = await insert_patient_file_sql(
+    inserted_file = await insert_or_update_patient_file_sql(
         patient_id=patient_id,
         unionid=unionid,
         file_name=tumor_file_name,
@@ -808,7 +810,8 @@ async def vcf_file_parse(
             file_path=source_file_info["file_path"],
             file_hash=source_file_info["file_hash"],
             file_desc=source_file_info["file_desc"],
-            file_source=source_file_info["file_source"]
+            file_source=source_file_info["file_source"],
+            mutation_count=source_file_info["mutation_count"]
         )
         await insert_patient_file_sql(
             patient_id=request.patient_id,
@@ -819,7 +822,8 @@ async def vcf_file_parse(
             file_path=fasta_file_info["file_path"],
             file_hash=fasta_file_info["file_hash"],
             file_desc=fasta_file_info["file_desc"],
-            file_source=fasta_file_info["file_source"]
+            file_source=fasta_file_info["file_source"],
+            mutation_count=fasta_file_info["mutation_count"]
         )
 
         # 5. 返回
@@ -854,3 +858,39 @@ async def excel_to_dictlist_api(
     except Exception as e:
         logger.error(f"excel_to_dictlist_api失败: {e}", exc_info=True)
         return ExcelToDictListResponse(ok=1, failed=str(e), excel_data=[])
+
+
+async def get_patient_hla_and_files(
+    request: GetPatientHLAAndFilesRequest = Body(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> GetPatientHLAAndFilesResponse:
+    """获取病人的HLA分型和特定文件信息"""
+    try:
+        # 校验token
+        system_token = credentials.credentials
+        payload = decode_vaild(system_token, SECRET_KEY, algorithms=[ALGORITHM])
+        unionid: str = payload.get("sub")
+        if not unionid:
+            raise HTTPException(status_code=401, detail="无效的用户认证")
+        
+        # 调用数据库查询函数
+        result = await get_patient_hla_and_files_sql(request.patient_id)
+        
+        # 构造响应数据
+        response_data = PatientHLAAndFilesInfo(
+            HLA_type=result['HLA_type'],
+            normal_files=[PatientFileInfo(**file_info) for file_info in result['normal_files']],
+            tumor_files=[PatientFileInfo(**file_info) for file_info in result['tumor_files']],
+            mutation_count=result['vcf_excel_mutation_count']
+        )
+        
+        return GetPatientHLAAndFilesResponse(ok=0, failed="", data=response_data)
+        
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"get_patient_hla_and_files失败: {e}", exc_info=True)
+        return GetPatientHLAAndFilesResponse(ok=1, failed=str(e), data=None)
+
+
+

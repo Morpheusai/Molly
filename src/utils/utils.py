@@ -4,6 +4,8 @@ import httpx
 import pandas as pd
 from typing import List,Tuple
 
+from starlette.background import P
+
 from src.utils.minio import upload_file_to_minio,download_from_minio_uri
 import mimetypes
 import hashlib
@@ -153,6 +155,8 @@ async def read_excel_from_minio_to_dictlist_fasta(minio_uri: str, bucket_name: s
     df = pd.read_excel(local_path)
     # 转为字典列表
     result = df.to_dict(orient="records")
+    # 获取突变数（Excel文件的行数）
+    mutation_count = len(result)
 
     # 生成fasta内容
     fasta_lines = []
@@ -193,7 +197,8 @@ async def read_excel_from_minio_to_dictlist_fasta(minio_uri: str, bucket_name: s
         "file_path": minio_uri,
         "file_hash": source_file_hash,
         "file_desc": source_file_desc,
-        "file_source": "1"
+        "file_source": "1",
+        "mutation_count": mutation_count
     }
 
     # 获取fasta文件信息
@@ -214,7 +219,8 @@ async def read_excel_from_minio_to_dictlist_fasta(minio_uri: str, bucket_name: s
         "file_path": fasta_minio_path,
         "file_hash": fasta_file_hash,
         "file_desc": fasta_file_desc,
-        "file_source": "01"  
+        "file_source": "01",
+        "mutation_count": mutation_count
     }
 
     # 删除本地文件

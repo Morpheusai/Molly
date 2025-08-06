@@ -18,7 +18,7 @@ agent_broker_url = g_config["url"]["agent_broker_url"]
 
 celery_agent = Celery("celery_task_agent", broker=agent_broker_url, backend=None)
 
-@celery_agent.task(soft_time_limit=600, ignore_result=True)
+@celery_agent.task(soft_time_limit=g_config["time"].get("celery_task_timeout", 600), ignore_result=True)
 def run_and_consume_generator(agent_request_dict, conversation_id, patient_id, unionid, task_queue_id=None):
     """
     Celery任务入口，必须是同步def。参数agent_request_dict为dict，conversation_id为str。
@@ -41,6 +41,7 @@ async def _run(agent_request_dict, conversation_id, patient_id, unionid):
             agent_request = agent_request_dict
         async for _ in predict_proxy_stream_generator(agent_request, conversation_id):
             pass
+        # 确保在生成器完成后执行回调
         await on_complete(patient_id, unionid)
     except Exception as e:
         logger.error(f"异步主逻辑_run执行异常: {e}", exc_info=True)

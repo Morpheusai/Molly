@@ -9,4 +9,4 @@ export IS_CELERY_WORKER=1
 celery -A src.utils.celery_task_agent worker --loglevel=info --concurrency=1 --prefetch-multiplier=1 --detach --logfile=/var/log/celery/stg/celery.log
 
 # 如果你想在前台运行（调试用），请注释掉上面一行，取消下面一行的注释：
-# celery -A src.utils.celery_task_agent worker --loglevel=info 
+# celery -A src.utils.celery_task_agent worker --loglevel=info --time-limit=21600 --soft-time-limit=21600 

@@ -180,7 +180,6 @@ async def insert_file_info_to_db(session: AsyncSession, patient_id: int, unionid
             file_status=file_info['file_status'],
             file_source=file_info['file_source'],
             file_desc=file_info['file_desc'],
-            is_deleted=False
         )
         session.add(uploaded_file)
         await session.commit()
@@ -210,8 +209,8 @@ async def check_existing_file(session: AsyncSession, patient_id: int, file_hash:
     query = select(FileModel).where(
         FileModel.patient_id == patient_id,
         FileModel.file_hash == file_hash,
-        FileModel.file_status == True,
-        FileModel.is_deleted == False,
+        FileModel.file_status == 1,  # 使用数字值
+        FileModel.is_deleted == 0,  # 使用数字值，0表示未删除
         FileModel.file_source == 0
     )
     result = await session.execute(query)
@@ -223,7 +222,7 @@ async def check_file_count(session: AsyncSession, patient_id: int) -> int:
     """查询当前患者的已上传文件数量"""
     query = select(func.count()).select_from(FileModel).where(
         FileModel.patient_id == patient_id,
-        FileModel.is_deleted == False
+        FileModel.is_deleted == 0  # 使用数字值，0表示未删除
     )
     result = await session.execute(query)
     return result.scalar()
@@ -379,7 +378,7 @@ async def upload_attachment(file: UploadFile, patient_id: int, unionid: str, ses
             "file_type": "sequence_file",
             "file_path": str(local_file_path),  # 默认是本地地址，成功时改为 minio路径
             "file_hash": file_hash,
-            "file_status": False,  # 默认失败，成功时改为 True
+            "file_status": 1,  # 默认失败，成功时改为 1
             "file_source": "02",  # 02表示fasta文件是由用户上传得到的
             "file_desc": "",
         }
@@ -391,7 +390,7 @@ async def upload_attachment(file: UploadFile, patient_id: int, unionid: str, ses
             file_path=local_file_path
         )
 
-        file_info["file_status"] = True  # 上传成功
+        file_info["file_status"] = 1  # 上传成功，使用数字值
         file_info["file_path"] = minio_file_path
         logger.info(f"Uploaded file {file.filename} to MinIO successfully")
 

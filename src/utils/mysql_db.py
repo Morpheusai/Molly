@@ -273,20 +273,37 @@ async def get_patients_brief_by_unionid_sql(session, unionid: str):
 @with_async_session
 async def get_patient_detail_by_id_sql(session, patient_id: int):
     """
-    根据病人ID查询该病人的详细信息（不返回id、source_id、created_at等字段）。
+    根据病人ID查询该病人的详细信息（包含项目信息和创建时间）。
 
     参数：
         session: 数据库会话，由装饰器自动注入
         patient_id: 需要查询的病人主键ID
     返回：
-        - 查询成功：返回 dict，包含病人详细信息（字段见 PatientDetailInfo）
+        - 查询成功：返回 dict，包含病人详细信息和项目信息
         - 未查到：返回 None
         - 异常：返回 None，并记录日志
     """
     try:
-        patient = await session.get(PatientModel, patient_id)
-        if not patient:
+        # 使用join查询获取病人和项目信息
+        query = select(PatientModel, ProjectModel).join(
+            ProjectModel, PatientModel.project_id == ProjectModel.id
+        ).where(PatientModel.id == patient_id)
+        
+        result = await session.execute(query)
+        row = result.first()
+        
+        if not row:
             return None
+            
+        patient, project = row
+        
+        # 构建qa_str: project_code_medical_record_number
+        qa_str = f"{project.project_code}_{patient.medical_record_number}" if project.project_code and patient.medical_record_number else None
+        
+        # 检查是否有predict_neo_antigen会话
+        has_conversation = await has_predict_neo_antigen_conversation_sql(patient.id)
+        copilot_flag = 0 if has_conversation else -1
+        
         return {
             "medical_record_number": patient.medical_record_number,
             "name": patient.name,
@@ -307,11 +324,22 @@ async def get_patient_detail_by_id_sql(session, patient_id: int):
             "clinical_diagnosis": patient.clinical_diagnosis,
             "medical_history": patient.medical_history,
             "status": patient.status,
+            "created_at": (
+                patient.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                if patient.created_at
+                else None
+            ),
             "updated_at": (
                 patient.updated_at.strftime("%Y-%m-%d %H:%M:%S")
                 if patient.updated_at
                 else None
             ),
+            # 项目信息
+            "project_name": project.name,
+            "principal_investigator": project.principal_investigator,
+            "study_phase": project.study_phase,
+            "qa_str": qa_str,
+            "copilot_flag": copilot_flag
         }
     except Exception as e:
         logger.error(f"查询病人详细信息失败: {e}", exc_info=True)
@@ -458,6 +486,10 @@ async def get_patients_brief_by_project_sql(session, project_id: int):
         )
         result = []
         for patient in patients.scalars().all():
+            # 查询该病人是否有predict_neo_antigen类型的会话
+            has_conversation = await has_predict_neo_antigen_conversation_sql(patient.id)
+            copilot_flag = 0 if has_conversation else -1
+            
             result.append(
                 {
                     "patient_id": patient.id,
@@ -494,6 +526,7 @@ async def get_patients_brief_by_project_sql(session, project_id: int):
                         if patient.updated_at
                         else None
                     ),
+                    "copilot_flag": copilot_flag,
                 }
             )
         return result
@@ -517,6 +550,8 @@ async def get_patient_files_sql(
             FileModel.file_type,
             FileModel.file_desc,
             FileModel.file_source,  # 新增字段
+            FileModel.file_size,    # 新增字段
+            FileModel.created_at    # 新增字段
         ).where(FileModel.patient_id == patient_id, FileModel.is_deleted == 0)
 
         if file_type:
@@ -531,6 +566,8 @@ async def get_patient_files_sql(
                 "file_type": row.file_type,
                 "file_desc": row.file_desc,
                 "file_source": row.file_source,  # 新增字段
+                "file_size": row.file_size,      # 新增字段
+                "created_at": row.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.created_at else None  # 新增字段
             }
             for row in files.all()
         ]
@@ -1671,7 +1708,7 @@ async def search_sessions_sql(session: AsyncSession, unionid: str):
         session_data = result.scalars().all()
         # 判断 session_data 是否为空
         if not session_data:
-            return QuerySessionsResponse(ok=1, failed="会话记录为空", sessions=[])
+            return QuerySessionsResponse(ok=0, failed="会话记录为空", sessions=[])
 
         # 构建会话列表
         sessions = []
@@ -1825,6 +1862,7 @@ async def insert_patient_file_sql(
     file_hash: str,
     file_desc: str,
     file_source: str = "0",
+    mutation_count: int = None,
 ):
     uploaded_file = FileModel(
         patient_id=patient_id,
@@ -1834,10 +1872,9 @@ async def insert_patient_file_sql(
         file_size=file_size,
         file_path=file_path,
         file_hash=file_hash,
-        file_status=True,
         file_source=file_source,
         file_desc=file_desc,
-        is_deleted=False,
+        mutation_count=mutation_count,
     )
     session.add(uploaded_file)
     await session.commit()
@@ -1855,3 +1892,152 @@ async def update_conversation_title_and_time(session, conversation_id: int, prom
         session.add(conversation)
         await session.commit()
         await session.refresh(conversation)
+
+
+@with_async_session
+async def insert_or_update_patient_file_sql(
+    session,
+    patient_id: int,
+    unionid: str,
+    file_name: str,
+    file_type: str,
+    file_size: int,
+    file_path: str,
+    file_hash: str,
+    file_desc: str,
+    file_source: str = "0",
+):
+    """
+    插入或更新病人文件记录
+    如果该病人下已存在相同类型的文件，则更新现有记录；否则插入新记录
+    当覆盖肿瘤或正常文件时，会同时删除相关的VCF Excel文件和序列文件
+    """
+    try:
+        # 查询该病人下是否已存在相同类型的文件
+        existing_file = await session.execute(
+            select(FileModel)
+            .where(
+                FileModel.patient_id == patient_id,
+                FileModel.file_type == file_type,
+                FileModel.is_deleted == 0
+            )
+        )
+        existing_file = existing_file.scalar_one_or_none()
+        
+        if existing_file:
+            # 如果存在相同类型的文件，更新现有记录
+            existing_file.file_name = file_name
+            existing_file.file_size = file_size
+            existing_file.file_path = file_path
+            existing_file.file_hash = file_hash
+            existing_file.file_desc = file_desc
+            existing_file.file_source = file_source
+            existing_file.upload_by = unionid
+            # 注意：不更新created_at，保持原始创建时间
+            session.add(existing_file)
+            
+            # 如果是覆盖肿瘤或正常文件，检查并删除相关的VCF Excel文件和序列文件
+            if file_type in ["normal_file", "tumor_file"]:
+                # 查找并删除 file_type 为 vcf_excel 的文件
+                vcf_excel_files = await session.execute(
+                    select(FileModel)
+                    .where(
+                        FileModel.patient_id == patient_id,
+                        FileModel.file_type == "vcf_excel",
+                        FileModel.file_source == "1",
+                        FileModel.is_deleted == 0
+                    )
+                )
+                for vcf_file in vcf_excel_files.scalars().all():
+                    vcf_file.is_deleted = 1
+                    session.add(vcf_file)
+                    logger.info(f"标记删除病人 {patient_id} 的VCF Excel文件: {vcf_file.file_name}")
+                
+                # 查找并删除 file_source 为 01 且 file_type 为 sequence_file 的文件
+                sequence_files = await session.execute(
+                    select(FileModel)
+                    .where(
+                        FileModel.patient_id == patient_id,
+                        FileModel.file_type == "sequence_file",
+                        FileModel.file_source == "01",
+                        FileModel.is_deleted == 0
+                    )
+                )
+                for seq_file in sequence_files.scalars().all():
+                    seq_file.is_deleted = 1
+                    session.add(seq_file)
+                    logger.info(f"标记删除病人 {patient_id} 的序列文件: {seq_file.file_name}")
+            
+            await session.commit()
+            await session.refresh(existing_file)
+            logger.info(f"更新了病人 {patient_id} 的 {file_type} 文件记录")
+            return existing_file
+        else:
+            # 如果不存在，创建新记录
+            uploaded_file = FileModel(
+                patient_id=patient_id,
+                upload_by=unionid,
+                file_name=file_name,
+                file_type=file_type,
+                file_size=file_size,
+                file_path=file_path,
+                file_hash=file_hash,
+                file_source=file_source,
+                file_desc=file_desc,
+            )
+            session.add(uploaded_file)
+            await session.commit()
+            await session.refresh(uploaded_file)
+            logger.info(f"为病人 {patient_id} 创建了新的 {file_type} 文件记录")
+            return uploaded_file
+    except Exception as e:
+        await session.rollback()
+        raise e
+
+
+@with_async_session
+async def get_patient_hla_and_files_sql(session, patient_id: int):
+    """获取病人的HLA分型和特定文件信息"""
+    try:
+        # 查询病人基本信息（HLA分型）
+        patient_query = select(PatientModel.HLA_type).where(PatientModel.id == patient_id)
+        patient_result = await session.execute(patient_query)
+        patient = patient_result.scalar_one_or_none()
+        
+        # 查询特定类型的文件
+        files_query = select(FileModel).where(
+            FileModel.patient_id == patient_id,
+            FileModel.is_deleted == 0,
+            FileModel.file_type.in_(['normal_file', 'tumor_file', 'vcf_excel'])
+        )
+        files_result = await session.execute(files_query)
+        files = files_result.scalars().all()
+        
+        # 初始化返回数据
+        result = {
+            'HLA_type': patient if patient else None,
+            'normal_files': [],
+            'tumor_files': [],
+            'vcf_excel_mutation_count': None
+        }
+        
+        # 处理文件信息
+        for file in files:
+            file_info = {
+                'file_name': file.file_name,
+                'file_path': file.file_path,
+                'created_at': file.created_at.strftime('%Y-%m-%d %H:%M:%S') if file.created_at else None
+            }
+            
+            if file.file_type == 'normal_file':
+                result['normal_files'].append(file_info)
+            elif file.file_type == 'tumor_file':
+                result['tumor_files'].append(file_info)
+            elif file.file_type == 'vcf_excel':
+                result['vcf_excel_mutation_count'] = file.mutation_count
+        
+        return result
+        
+    except Exception as e:
+        raise e
+
